@@ -2,6 +2,7 @@
  / \ / \ / \ / \ / \ / \ / \ / \ / \ 
 ( V | A | E | G | A | N | F | U | ZZ )
  \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ \_/ 
+
 ```
 
 # VAEGAN Fuzzer - Part of the AI - RMF Framework. 
@@ -25,7 +26,6 @@ This directory contains the implementation of the VAEGAN-based intelligent fuzze
 -   `png_instrumentation.so.c` : create a shared object to help with the viewer training / oracle predictions
 -    `run_fuzzer_setup.py` :  prepares the environment for the fuzzing.
 -    `lime_explainer.py` : create explanation diagrams on the features responsible for successful predictions by the models.
--    
 ## 
 ## Features:
 
@@ -34,7 +34,7 @@ This directory contains the implementation of the VAEGAN-based intelligent fuzze
 -   **Payload Injection**: Supports various fuzzing types (UAF, overflow, metadata triggers, ROP) and dynamic payload offsets.
 -   **Crash Monitoring**: Integrates with GDB and Apport to detect and analyze crashes.
 -   **TensorBoard Logging**: Records training progress and visualizes validated payloads for non-`png_consumer` viewers.
--   **Address Leaking**: The `png_consumer` helps in leaking internal addresses for more precise exploit development.
+-   **Address Leaking**: The `png_consumer` helps in leaking internal addresses for more precise exploit development, there's also an injectable shared object that is used to fit the address oracle and predict gadgets for local runs.
 
 #pretrained models: 
 - under the models folder you may find ready to use trained models for the vaegan fuzzer and the address oracle.
