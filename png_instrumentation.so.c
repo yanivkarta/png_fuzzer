@@ -53,10 +53,6 @@ void injected_gadget_ldraa_x0_x1() {
     asm volatile("ldraa x0, [x1]");
 }
 
-void injected_gadget_blraa_x0() {
-    asm volatile("blraa x0");
-}
-
 // More VOP gadgets
 void injected_gadget_vop_ldr_d0_x1() {
     asm volatile(
@@ -97,7 +93,6 @@ png_structp png_create_read_struct(png_const_charp user_png_ver, png_voidp error
     printf("INJECTED_GADGET pacia_x30: %p\n", injected_gadget_pacia_x30);
     printf("INJECTED_GADGET autia_x30: %p\n", injected_gadget_autia_x30);
     printf("INJECTED_GADGET ldraa_x0_x1: %p\n", injected_gadget_ldraa_x0_x1);
-    printf("INJECTED_GADGET blraa_x0: %p\n", injected_gadget_blraa_x0);
     printf("INJECTED_GADGET vop_ldr_d0_x1: %p\n", injected_gadget_vop_ldr_d0_x1);
     printf("INJECTED_GADGET vop_str_d0_x0: %p\n", injected_gadget_vop_str_d0_x0);
     printf("INJECTED_PAYLOAD_BUFFER: %p\n", global_injected_payload);
@@ -177,7 +172,6 @@ __attribute__((constructor)) void init_instrumentation() {
     printf("  - injected_gadget_pacia_x30\n");
     printf("  - injected_gadget_autia_x30\n");
     printf("  - injected_gadget_ldraa_x0_x1\n");
-    printf("  - injected_gadget_blraa_x0\n");
     printf("  - injected_gadget_vop_ldr_d0_x1\n");
     printf("  - injected_gadget_vop_str_d0_x0\n");
     printf("  - execute_injected_payload function\n");
@@ -188,4 +182,3 @@ __attribute__((constructor)) void init_instrumentation() {
 __attribute__((destructor)) void cleanup_instrumentation() {
     printf("INSTRUMENTATION: Shared object unloaded\n");
     fflush(stdout);
-}
