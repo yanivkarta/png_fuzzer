@@ -41,7 +41,26 @@ This directory contains the implementation of the VAEGAN-based intelligent fuzze
   
 
 ## Usage:
-To setup a fuzzing environment : 
+To setup a fuzzing environment, first compile a sink: 
+
+set the architecture for the march flag to fit the target platform, I tested  arv8.3-a , armv9-a and newer  to support blraa instructions and PAC/BTI evasion. 
+
+```bash
+gcc png_consumer.c -march=armv9-a  -o png_consumer -lpng
+``` 
+compile the injection shared object and the mini tester 
+
+```bash
+gcc png_instrumentation.so.c -shared -fPIC -o png_instrumentation.so -march=armv9-a
+```
+
+and test with LD_PRELOAD :
+
+
+```bash
+gcc  test_png.c -o test_png -lpng && LD_PRELOAD=./png_instrumentation.so ./test_png
+```
+
 
 
 
