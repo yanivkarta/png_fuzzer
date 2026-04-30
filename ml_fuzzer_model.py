@@ -1,9 +1,15 @@
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from typing import List, Tuple, Optional, Dict
+
+
+#for mutual information based feature selection in the future
+from sklearn.feature_selection import mutual_info_regression, SelectKBest 
+
 
 from dataclasses import dataclass
 import numpy as np
@@ -73,7 +79,7 @@ class AddressDataset(Dataset):
     def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
         sample = self.samples[idx]
         input_tensor = torch.tensor(sample.features, dtype=torch.float32)
-        output_tensor = torch.tensor(sample.addresses, dtype=torch.float32)  # addresses as float32
+        output_tensor = torch.tensor(sample.addresses, dtype=torch.float64)  # addresses as double precision
         return input_tensor, output_tensor
 
 
@@ -123,8 +129,8 @@ class FuzzingDataset(Dataset):
             sample.leaked_addresses_features +
             sample.apport_crash_features +
             sample.elf_features +
-            [sample.payload_offset_attempted / self.max_payload_offset] +
-            [sample.trigger_offset_attempted / self.max_trigger_offset]
+            [sample.payload_offset_attempted / max(1, self.max_payload_offset)] +
+            [sample.trigger_offset_attempted / max(1, self.max_trigger_offset)]
         )
         
         # Build output feature vector (one-hot encoded)
@@ -132,8 +138,8 @@ class FuzzingDataset(Dataset):
         chain_type_one_hot = [1.0 if ct == sample.chain_type_prediction else 0.0 for ct in self.chain_types]
         
         # Normalized offsets as regression targets
-        normalized_payload_offset = [sample.payload_offset_attempted / self.max_payload_offset]
-        normalized_trigger_offset = [sample.trigger_offset_attempted / self.max_trigger_offset]
+        normalized_payload_offset = [sample.payload_offset_attempted / max(1, self.max_payload_offset)]
+        normalized_trigger_offset = [sample.trigger_offset_attempted / max(1, self.max_trigger_offset)]
         
         output_features = (
             fuzz_type_one_hot +
@@ -186,12 +192,11 @@ class Discriminator(nn.Module):
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 1)
         self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         h = self.relu(self.fc1(x))
         h = self.relu(self.fc2(h))
-        return self.sigmoid(self.fc3(h))
+        return self.fc3(h)
 
 class VAEGAN(nn.Module):
     def __init__(self, input_dim, latent_dim, output_dim):
@@ -237,45 +242,261 @@ class AddressOracle(nn.Module):
     
     def __init__(self, input_dim, output_dim):
         super().__init__()
+        
+        # Use LayerNorm instead of BatchNorm for stability with small batches
         self.net = nn.Sequential(
             nn.Linear(input_dim, 256),
+            nn.LayerNorm(256),
             nn.ReLU(),
+            nn.Dropout(0.1),
             nn.Linear(256, 128),
+            nn.LayerNorm(128),
             nn.ReLU(),
+            nn.Dropout(0.1),
             nn.Linear(128, 64),
+            nn.LayerNorm(64),
             nn.ReLU(),
             nn.Linear(64, output_dim)
         )
+        
+        # Initialize weights with proper scaling
+        self._init_weights()
+    
+    def _init_weights(self):
+        """Initialize network weights using Kaiming initialization."""
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0.0)
+            elif isinstance(module, nn.LayerNorm):
+                nn.init.constant_(module.weight, 1.0)
+                nn.init.constant_(module.bias, 0.0)
 
     def forward(self, x):
         return self.net(x)
 
 
 def collect_address_features(pid: int, elf_features: List[float], viewer_name: str, viewers: List[str]) -> List[float]:
-    """Collect features for AddressOracle: clock features, base addresses, etc."""
+    """Collect features for AddressOracle: clock features, base addresses, CPU/GPU registers, and symbol-derived ELF features."""
     try:
         process = psutil.Process(pid)
+        process_age = time.time() - process.create_time()
         uptime = time.time() - psutil.boot_time()
-        start_time = process.create_time()
         cpu_times = process.cpu_times()
         memory_info = process.memory_info()
-        
-        # Viewer one-hot
+        num_threads = process.num_threads()
+
+        proc_maps = _parse_proc_maps(pid)
+        cpu_gpu_regs = _sample_cpu_gpu_registers()
+
         viewer_one_hot = [1.0 if v == viewer_name else 0.0 for v in viewers]
-        
+
+        # Add time of day features
+        import datetime
+        now = datetime.datetime.now()
+        hour_of_day = now.hour / 24.0
+        minute_of_hour = now.minute / 60.0
+        second_of_minute = now.second / 60.0
+        day_of_week = now.weekday() / 7.0  # 0=Monday, 6=Sunday
+
         features = [
-            uptime,
-            start_time,
-            cpu_times.user,
-            cpu_times.system,
-            memory_info.rss,
-            memory_info.vms,
-        ] + elf_features + viewer_one_hot
-        
+            min(process_age / 3600.0, 1.0),
+            min(uptime / 86400.0, 1.0),
+            cpu_times.user / 100.0,
+            cpu_times.system / 100.0,
+            min(memory_info.rss / float(2**30), 1.0),
+            min(memory_info.vms / float(2**30), 1.0),
+            min(num_threads / 100.0, 1.0),
+            proc_maps['main_base'],
+            proc_maps['libc_base'],
+            proc_maps['heap_start'],
+            proc_maps['stack_start'],
+            proc_maps['mmap_count'],
+            proc_maps['text_map_count'],
+            hour_of_day,
+            minute_of_hour,
+            second_of_minute,
+            day_of_week,
+        ] + cpu_gpu_regs + elf_features + viewer_one_hot
+
         return features
     except Exception as e:
         logger.warning(f"Failed to collect features for pid {pid}: {e}")
-        return [0.0] * (6 + len(elf_features) + len(viewers))
+        return get_system_features() + [0.0] * 8 + elf_features + [1.0 if v == viewer_name else 0.0 for v in viewers]
+
+
+def get_system_features() -> List[float]:
+    """Get system-level features for AddressOracle when process is not available."""
+    try:
+        uptime = time.time() - psutil.boot_time()
+        
+        # Add time of day features
+        import datetime
+        now = datetime.datetime.now()
+        hour_of_day = now.hour / 24.0
+        minute_of_hour = now.minute / 60.0
+        second_of_minute = now.second / 60.0
+        day_of_week = now.weekday() / 7.0  # 0=Monday, 6=Sunday
+        
+        # System load averages
+        load1, load5, load15 = psutil.getloadavg()
+        load1_norm = min(load1 / 10.0, 1.0)
+        load5_norm = min(load5 / 10.0, 1.0)
+        load15_norm = min(load15 / 10.0, 1.0)
+        
+        return [
+            0.0,  # process_age (not available)
+            min(uptime / 86400.0, 1.0),
+            0.0,  # cpu_times.user (not available)
+            0.0,  # cpu_times.system (not available)
+            0.0,  # memory_info.rss (not available)
+            0.0,  # memory_info.vms (not available)
+            0.0,  # num_threads (not available)
+            0.0,  # main_base (not available)
+            0.0,  # libc_base (not available)
+            0.0,  # heap_start (not available)
+            0.0,  # stack_start (not available)
+            load1_norm,  # mmap_count -> system load1
+            load5_norm,  # text_map_count -> system load5
+            hour_of_day,
+            minute_of_hour,
+            second_of_minute,
+            day_of_week,
+        ]
+    except Exception as e:
+        logger.warning(f"Failed to collect system features: {e}")
+        return [0.0] * 17
+
+
+def _sample_cpu_gpu_registers() -> List[float]:
+    """Sample CPU/GPU state registers from current process context."""
+    try:
+        # CPU register features from current process
+        import ctypes
+        cpu_percent = min(psutil.cpu_percent(interval=0.01) / 100.0, 1.0) if hasattr(psutil, 'cpu_percent') else 0.0
+        
+        # Memory pressure indicator (used vs available)
+        virtual_memory = psutil.virtual_memory()
+        mem_percent = virtual_memory.percent / 100.0
+        swap_percent = psutil.swap_memory().percent / 100.0 if hasattr(psutil, 'swap_memory') else 0.0
+        
+        # CPU frequency state (normalized)
+        try:
+            cpu_freq = psutil.cpu_freq()
+            freq_percent = (cpu_freq.current - cpu_freq.min) / max(1, cpu_freq.max - cpu_freq.min) if cpu_freq else 0.0
+        except Exception:
+            freq_percent = 0.0
+        
+        # Context switch rate indicator
+        try:
+            ctx_switches = psutil.cpu_stats().ctx_switches
+            ctx_switch_norm = min(ctx_switches / 1000000.0, 1.0)
+        except Exception:
+            ctx_switch_norm = 0.0
+        
+        # GPU simulation (if GPU available, sample from nvidia-smi or similar)
+        gpu_util = 0.0
+        gpu_mem = 0.0
+        try:
+            # Try to read GPU info
+            import subprocess
+            result = subprocess.run(
+                ['nvidia-smi', '--query-gpu=utilization.gpu,utilization.memory', '--format=csv,noheader,nounits'],
+                capture_output=True, text=True, timeout=1
+            )
+            if result.returncode == 0:
+                parts = result.stdout.strip().split(',')
+                if len(parts) >= 2:
+                    gpu_util = min(float(parts[0].strip()) / 100.0, 1.0)
+                    gpu_mem = min(float(parts[1].strip()) / 100.0, 1.0)
+        except Exception:
+            gpu_util = 0.0
+            gpu_mem = 0.0
+        
+        return [
+            cpu_percent,
+            mem_percent,
+            swap_percent,
+            freq_percent,
+            ctx_switch_norm,
+            gpu_util,
+            gpu_mem,
+            (cpu_percent + gpu_util) / 2.0,  # Combined CPU+GPU utilization
+        ]
+    except Exception as e:
+        logger.debug(f"Failed to sample CPU/GPU registers: {e}")
+        return [0.0] * 8
+
+
+def _parse_proc_maps(pid: int) -> Dict[str, float]:
+    """Extract normalized base addresses and memory region layout from /proc/<pid>/maps."""
+    maps_info = {
+        'main_base': 0.0,
+        'libc_base': 0.0,
+        'heap_start': 0.0,
+        'stack_start': 0.0,
+        'mmap_count': 0.0,
+        'text_map_count': 0.0,
+    }
+    maps_path = f'/proc/{pid}/maps'
+    if not os.path.exists(maps_path):
+        return maps_info
+
+    try:
+        exe_path = None
+        try:
+            process = psutil.Process(pid)
+            exe_path = process.exe()
+        except Exception:
+            exe_path = None
+
+        main_base = None
+        libc_base = None
+        heap_start = 0
+        stack_start = 0
+        mmap_count = 0
+        text_map_count = 0
+
+        with open(maps_path, 'r') as f:
+            for line in f:
+                mmap_count += 1
+                parts = line.strip().split()
+                if len(parts) < 6:
+                    continue
+                addr_range, perms, offset, dev, inode = parts[:5]
+                pathname = parts[5] if len(parts) >= 6 else ''
+                start_str, _ = addr_range.split('-')
+                start_addr = int(start_str, 16)
+
+                if 'x' in perms:
+                    text_map_count += 1
+
+                normalized_addr = start_addr / float(2**20)
+                if pathname and exe_path and os.path.realpath(pathname) == os.path.realpath(exe_path):
+                    if main_base is None:
+                        main_base = normalized_addr
+                if pathname and 'libc' in pathname and libc_base is None:
+                    libc_base = normalized_addr
+                if pathname and ('ld-' in pathname or 'ld-linux' in pathname) and libc_base is None:
+                    libc_base = normalized_addr
+                if pathname == '[heap]' and heap_start == 0:
+                    heap_start = normalized_addr
+                if pathname == '[stack]' and stack_start == 0:
+                    stack_start = normalized_addr
+
+        if main_base is not None:
+            maps_info['main_base'] = main_base
+        if libc_base is not None:
+            maps_info['libc_base'] = libc_base
+        maps_info['heap_start'] = heap_start
+        maps_info['stack_start'] = stack_start
+        maps_info['mmap_count'] = float(mmap_count) / 200.0
+        maps_info['text_map_count'] = float(text_map_count) / 50.0
+    except Exception:
+        return maps_info
+
+    return maps_info
 
 
 def parse_gadget_addresses(gdb_output: str) -> Dict[str, int]:
@@ -289,49 +510,250 @@ def parse_gadget_addresses(gdb_output: str) -> Dict[str, int]:
     return addresses
 
 
+def convert_deltas_to_absolute_addresses(predicted_deltas: torch.Tensor, base_address: int, libc_base: int = None) -> Dict[str, int]:
+    """Convert predicted address deltas to absolute addresses for exploitation.
+    
+    Args:
+        predicted_deltas: Tensor of predicted address offsets from the model
+        base_address: Base address of the target executable/library (from AddressOracle features)
+        libc_base: Optional libc base address for ROP gadgets in libc
+    
+    Returns:
+        Dictionary mapping gadget names to absolute addresses
+    """
+    gadget_names = [
+        "pop_x0_x1_ret", "ldr_x0_x1_br_x0", "vop_ldr_str_q0",
+        "pacia_x30", "autia_x30", "ldraa_x0_x1",
+        "blraa_x0", "vop_ldr_d0_x1", "vop_str_d0_x0"
+    ]
+    
+    addresses = {}
+    if isinstance(predicted_deltas, torch.Tensor):
+        deltas = predicted_deltas.detach().cpu().numpy().astype(int)
+    else:
+        deltas = np.array(predicted_deltas, dtype=int)
+    
+    # Use libc_base for most gadgets, fallback to base_address
+    for i, name in enumerate(gadget_names):
+        if i < len(deltas):
+            offset = deltas[i]
+            # Alternate between base and libc addresses for variety
+            selected_base = libc_base if (libc_base and i % 2 == 0) else base_address
+            addresses[name] = selected_base + offset
+    
+    return addresses
+
+
+def compute_feature_weights(dataset: AddressDataset) -> torch.Tensor:
+    """Compute feature importance weights based on correlation coefficients with targets.
+    
+    Features with higher absolute correlation to address deltas get higher weights,
+    helping the model focus on the most predictive features during training.
+    """
+    if len(dataset) == 0:
+        return None
+    
+    if len(dataset) < 8:
+        logger.info("Too few samples for reliable feature correlation weighting; skipping.")
+        return None
+    
+    # Collect all inputs and targets
+    all_inputs = []
+    all_targets = []
+    
+    for i in range(len(dataset)):
+        inputs, targets = dataset[i]
+        all_inputs.append(inputs.numpy())
+        all_targets.append(targets.numpy())
+    
+    all_inputs = np.array(all_inputs)  # Shape: (num_samples, num_features)
+    all_targets = np.array(all_targets)  # Shape: (num_samples, num_outputs)
+
+    # Check for zero variance features and skip weighting if all features have low variance to avoid adding noise 
+    feature_variances = np.var(all_inputs, axis=0)
+    if np.all(feature_variances < 1e-6):
+        logger.info("All features have near-zero variance; skipping feature weighting to avoid adding noise.")
+        return None
+    
+
+
+    # Compute correlation coefficient for each feature with each output
+    num_features = all_inputs.shape[1]
+    num_outputs = all_targets.shape[1]
+    
+    feature_correlations = np.zeros(num_features)
+    
+    for feat_idx in range(num_features):
+        feature_vals = all_inputs[:, feat_idx]
+        # Compute max correlation across all outputs
+        max_corr = 0.0
+        for out_idx in range(num_outputs):
+            target_vals = all_targets[:, out_idx]
+            # Standardize for correlation
+            if np.std(feature_vals) > 1e-6 and np.std(target_vals) > 1e-6:
+                corr = np.abs(np.corrcoef(feature_vals, target_vals)[0, 1])
+                max_corr = max(max_corr, corr)
+        feature_correlations[feat_idx] = max_corr
+    
+    # Convert correlations to weights: use sqrt to soften extreme differences
+    # Add small epsilon to avoid zero weights
+    weights = np.sqrt(np.abs(feature_correlations) + 0.01)
+    
+    if np.allclose(weights, weights[0], atol=1e-4):
+        logger.info("Feature correlation weights are uniform; skipping weighting.")
+        return None
+
+    # Normalize weights to mean=1.0 and clamp to avoid extreme scaling
+    weights = weights / np.mean(weights)
+    weights = np.clip(weights, 0.5, 2.0)
+
+    logger.info(f"Feature weights computed from {len(dataset)} samples:")
+    logger.info(f"  Raw corr min/max: {feature_correlations.min():.4f}/{feature_correlations.max():.4f}")
+    logger.info(f"  Weight min/max: {weights.min():.4f}/{weights.max():.4f}, mean: {weights.mean():.4f}")
+
+    return torch.tensor(weights, dtype=torch.float32)
+
+
 def train_address_oracle(model: AddressOracle, dataset: AddressDataset, epochs: int = 100, device: str = "cpu", writer: SummaryWriter = None) -> float:
-    """Train AddressOracle and return accuracy (1 - MAPE)."""
+    """Train AddressOracle with feature weighting, learning rate scheduling, and gradient clipping."""
     if len(dataset) == 0:
         return 0.0
     
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    # Compute feature weights based on correlation
+    feature_weights = compute_feature_weights(dataset)
+    
+    #if the feature_weights are all close to 1.0, skip weighting during training to avoid adding noise 
+    if feature_weights is not None and min(feature_weights) > 0.99 and max(feature_weights) < 1.01: 
+        logger.info("Feature weights are all close to 1.0, skipping weighting during training") 
+        feature_weights = None
+    #add mutual information based feature selection in the future to further improve training efficiency and accuracy by focusing on the most predictive features and reducing noise from less relevant ones 
+    #use mutual_info_regression from sklearn to compute mutual information between each feature and the target addresses, then select top-k features based on mutual information scores to train the model, which can help improve accuracy and reduce overfitting by focusing on the most informative features for address prediction 
+    if feature_weights is not None:
+        logger.info("Applying feature weighting during training")
+    else :
+        logger.info("No significant feature weighting applied during training")
+
+    #if feature_weights is not None:
+    # Split dataset for validation
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    
+    train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     criterion = nn.MSELoss()
+    
+    # Learning rate scheduler: reduce LR when validation loss plateaus
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=20
+    )
+    
     model.to(device)
+    model.double()
+    
+    if feature_weights is not None:
+        feature_weights = feature_weights.to(device)
+    
+    best_val_loss = float('inf')
+    patience_counter = 0
+    max_patience = 50
     
     for epoch in range(epochs):
+        # Training phase
         model.train()
         total_loss = 0
-        for inputs, targets in dataloader:
-            inputs, targets = inputs.to(device), targets.to(device)
+        for inputs, targets in train_dataloader:
+            inputs, targets = inputs.to(device).double(), targets.to(device).double()
+            
+            # Apply feature weighting to inputs
+            if feature_weights is not None:
+                weighted_inputs = inputs * feature_weights.unsqueeze(0)
+            else:
+                weighted_inputs = inputs
+            
             optimizer.zero_grad()
-            outputs = model(inputs)
+            outputs = model(weighted_inputs)
             loss = criterion(outputs, targets)
             loss.backward()
+            
+            # Gradient clipping to prevent exploding gradients
+            #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
             optimizer.step()
             total_loss += loss.item()
-        avg_loss = total_loss / len(dataloader)
-        if epoch % 10 == 0:
-            print(f"AddressOracle Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+        
+        train_loss = total_loss / len(train_dataloader)
+        
+        # Validation phase
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for inputs, targets in val_dataloader:
+                inputs, targets = inputs.to(device).double(), targets.to(device).double()
+                
+                if feature_weights is not None:
+                    weighted_inputs = inputs * feature_weights.unsqueeze(0)
+                else:
+                    weighted_inputs = inputs
+                
+                outputs = model(weighted_inputs)
+                loss = criterion(outputs, targets)
+                val_loss += loss.item()
+        
+        val_loss = val_loss / len(val_dataloader) if len(val_dataloader) > 0 else 0.0
+        
+        # Learning rate scheduling based on validation loss
+        scheduler.step(val_loss)
+        
+        # Early stopping based on validation loss
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+        
+        if epoch % 50 == 0:
+            print(f"AddressOracle Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+        
         if writer:
-            writer.add_scalar('AddressOracle/Loss', avg_loss, epoch)
+            writer.add_scalar('AddressOracle/Train_Loss', train_loss, epoch)
+            writer.add_scalar('AddressOracle/Val_Loss', val_loss, epoch)
+        
+        # Early stopping if validation loss doesn't improve
+        if patience_counter >= max_patience:
+            logger.info(f"Early stopping at epoch {epoch+1}: validation loss plateaued for {max_patience} epochs")
+            break
     
-    # Evaluate accuracy
+    # Final evaluation on full dataset
     model.eval()
-    total_mae = 0
+    total_mae = 0.0
+    total_target_abs = 0.0
     count = 0
+    full_dataloader = DataLoader(dataset, batch_size=32, shuffle=False)
+    
     with torch.no_grad():
-        for inputs, targets in dataloader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs)
+        for inputs, targets in full_dataloader:
+            inputs, targets = inputs.to(device).double(), targets.to(device).double()
+            
+            if feature_weights is not None:
+                weighted_inputs = inputs * feature_weights.unsqueeze(0)
+            else:
+                weighted_inputs = inputs
+            
+            outputs = model(weighted_inputs)
             mae = torch.mean(torch.abs(outputs - targets))
             total_mae += mae.item()
+            total_target_abs += torch.mean(torch.abs(targets)).item()
             count += 1
-    avg_mae = total_mae / count if count > 0 else 0
-    accuracy = 0.96  # Demo: assume good accuracy
-    print(f"AddressOracle Training Accuracy: {accuracy:.4f}")
+    
+    avg_mae = total_mae / count if count > 0 else 0.0
+    avg_target_abs = total_target_abs / count if count > 0 else 1.0
+    accuracy = max(0.0, 1.0 - avg_mae / (avg_target_abs + 1e-6))
+    print(f"AddressOracle Training MAE: {avg_mae:.4f}, Normalized accuracy: {accuracy:.4f}")
     if writer:
-        writer.add_scalar('AddressOracle/Accuracy', accuracy, epochs)
+        writer.add_scalar('AddressOracle/Final_Accuracy', accuracy, epochs)
     return accuracy
 
 
@@ -339,7 +761,7 @@ def predict_addresses(oracle: AddressOracle, features: List[float], device: str 
     """Predict gadget addresses using the Oracle."""
     oracle.eval()
     with torch.no_grad():
-        input_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(device)
+        input_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0).to(device).double()
         outputs = oracle(input_tensor).squeeze(0)
         return [int(addr) for addr in outputs.tolist()]
 
@@ -364,17 +786,17 @@ def train_vaegan(model: VAEGAN, dataset: FuzzingDataset, epochs: int, writer: Su
     optimizer_discriminator = optim.Adam(model.discriminator.parameters(), lr=learning_rate)
 
     # Loss functions
-    criterion_recon = nn.MSELoss() # For continuous outputs (normalized offsets) and one-hot (can use MSE)
-    criterion_gan = nn.BCEWithLogitsLoss() # For discriminator
+    criterion_recon = nn.MSELoss()  # For continuous outputs (normalized offsets) and one-hot (can use MSE)
+    criterion_gan = nn.BCEWithLogitsLoss()  # For discriminator logits
 
     model.to(device)
 
     for epoch in range(epochs):
         model.train()
-        total_recon_loss = 0
-        total_kl_loss = 0
-        total_generator_loss = 0
-        total_discriminator_loss = 0
+        total_recon_loss = 0.0
+        total_kl_loss = 0.0
+        total_generator_loss = 0.0
+        total_discriminator_loss = 0.0
 
         for batch_idx, (inputs, targets) in enumerate(dataloader):
             inputs, targets = inputs.to(device), targets.to(device)
@@ -387,18 +809,19 @@ def train_vaegan(model: VAEGAN, dataset: FuzzingDataset, epochs: int, writer: Su
             loss_discriminator_real = criterion_gan(real_output, torch.ones_like(real_output))
 
             # Fake samples from VAE's decoder
-            _, _, _, z_from_encoder = model.forward(inputs) # Get latent z from encoder
-            fake_samples_from_vae = model.decode(z_from_encoder.detach()) # Detach to not train decoder with D loss
+            _, _, _, z_from_encoder = model.forward(inputs)  # Get latent z from encoder
+            fake_samples_from_vae = model.decode(z_from_encoder.detach())  # Detach to not train decoder with D loss
             fake_output_vae = model.discriminator(fake_samples_from_vae)
             loss_discriminator_fake_vae = criterion_gan(fake_output_vae, torch.zeros_like(fake_output_vae))
 
             # Fake samples from random noise (pure GAN part)
-            z_random = torch.randn(batch_size, model.encoder.latent_dim).to(device)
+            batch_size_actual = inputs.shape[0]
+            z_random = torch.randn(batch_size_actual, model.encoder.latent_dim).to(device)
             fake_samples_random = model.decode(z_random.detach())
             fake_output_random = model.discriminator(fake_samples_random)
             loss_discriminator_fake_random = criterion_gan(fake_output_random, torch.zeros_like(fake_output_random))
 
-            loss_discriminator = (loss_discriminator_real + loss_discriminator_fake_vae + loss_discriminator_fake_random) / 3
+            loss_discriminator = (loss_discriminator_real + loss_discriminator_fake_vae + loss_discriminator_fake_random) / 3.0
             loss_discriminator.backward()
             optimizer_discriminator.step()
             total_discriminator_loss += loss_discriminator.item()
@@ -407,22 +830,20 @@ def train_vaegan(model: VAEGAN, dataset: FuzzingDataset, epochs: int, writer: Su
             optimizer_encoder.zero_grad()
             optimizer_decoder.zero_grad()
 
-            reconstructed_x, mu, logvar, z = model.forward(inputs)
+            reconstructed_x, mu, logvar, _ = model.forward(inputs)
 
             # VAE losses
             recon_loss = criterion_recon(reconstructed_x, targets)
-            kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-            
+            kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / float(batch_size_actual)
+
             # GAN loss for generator (decoder)
-            # We want the discriminator to classify generated samples as real
             fake_output_for_generator = model.discriminator(reconstructed_x)
             loss_generator = criterion_gan(fake_output_for_generator, torch.ones_like(fake_output_for_generator))
 
             # Combined loss for VAE-GAN
-            # The balance between VAE and GAN components is crucial
             total_loss_vae_gan = recon_loss + kl_weight * kl_loss + loss_generator
             total_loss_vae_gan.backward()
-            
+
             optimizer_encoder.step()
             optimizer_decoder.step()
 
@@ -435,16 +856,23 @@ def train_vaegan(model: VAEGAN, dataset: FuzzingDataset, epochs: int, writer: Su
         avg_generator_loss = total_generator_loss / len(dataloader)
         avg_discriminator_loss = total_discriminator_loss / len(dataloader)
 
+        if torch.isnan(torch.tensor([avg_recon_loss, avg_kl_loss, avg_generator_loss, avg_discriminator_loss])).any():
+            logger.warning("NaN detected in VAEGAN training losses. Stopping training early.")
+            break
+
         print(f"Epoch {epoch+1}/{epochs}, "
               f"Recon Loss: {avg_recon_loss:.4f}, "
               f"KL Loss: {avg_kl_loss:.4f}, "
               f"Gen Loss: {avg_generator_loss:.4f}, "
               f"Disc Loss: {avg_discriminator_loss:.4f}")
 
-        writer.add_scalar('Loss/Reconstruction', avg_recon_loss, epoch)
-        writer.add_scalar('Loss/KL_Divergence', avg_kl_loss, epoch)
-        writer.add_scalar('Loss/Generator', avg_generator_loss, epoch)
-        writer.add_scalar('Loss/Discriminator', avg_discriminator_loss, epoch)
+        if writer:
+            writer.add_scalar('Loss/Reconstruction', avg_recon_loss, epoch)
+            writer.add_scalar('Loss/KL_Divergence', avg_kl_loss, epoch)
+            writer.add_scalar('Loss/Generator', avg_generator_loss, epoch)
+            writer.add_scalar('Loss/Discriminator', avg_discriminator_loss, epoch)
+
+    return avg_recon_loss
 
 def generate_suggestion(model: VAEGAN, input_features: torch.Tensor,
                         fuzz_types: List[str], chain_types: List[str], # Added chain_types

