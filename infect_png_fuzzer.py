@@ -12,6 +12,7 @@ import re
 import csv
 import fcntl  # For file locking
 import concurrent.futures # New import for parallelization
+import signal  # For process suspension control
 from typing import Optional, List, Dict, Union, Callable
 import torch # For ML model
 from torch.utils.tensorboard import SummaryWriter # For TensorBoard logging
@@ -101,6 +102,7 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
                                 logger.debug(f"Found {viewer_name} process {proc.info['pid']} with {file_path} loaded")
                                 return proc.info['pid']
             except (psutil.NoSuchProcess, psutil.AccessDenied, FileNotFoundError):
+                print(f"Could not access process {proc.info['pid']} - it may have exited or we may not have permission.")
                 continue
                 
     except ImportError:
@@ -127,14 +129,149 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
     logger.debug(f"No {viewer_name} process found with {file_path} loaded")
     return None
 
+# Global registry to track suspended viewer processes by unique_id and file_path
+_suspended_viewer_processes = {}
+
+def start_viewer_suspended(viewer_cmd: list, file_path: str, unique_id: str, env: dict = None) -> Optional[int]:
+    """Start a viewer process suspended (SIGSTOP) and register it for later GDB attachment.
+    
+    Returns the PID of the suspended process, or None if startup failed.
+    """
+    if env is None:
+        env = os.environ.copy()
+    
+    # Add instrumentation for supported viewers
+    viewer_name = os.path.basename(viewer_cmd[0])
+    if viewer_name in ["eog", "firefox"]:
+        so_path = os.path.abspath("./png_instrumentation.so")
+        if os.path.exists(so_path):
+            lib_dir = os.path.dirname(so_path)
+            current_ld_library_path = env.get("LD_LIBRARY_PATH", "")
+            env["LD_LIBRARY_PATH"] = f"{lib_dir}:{current_ld_library_path}" if current_ld_library_path else lib_dir
+
+            current_ld_preload = env.get("LD_PRELOAD", "")
+            env["LD_PRELOAD"] = f"{so_path}:{current_ld_preload}" if current_ld_preload else so_path
+            logger.debug(f"Injected instrumentation SO into suspended {viewer_name}: {so_path}")
+    
+    try:
+        cmd = viewer_cmd + [file_path]
+        logger.info(f"Starting {viewer_name} suspended for {file_path} (unique_id: {unique_id})")
+        
+        # Start process normally first
+        proc = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=False
+        )
+        
+        logger.debug(f"Process started with PID {proc.pid}, checking status...")
+        
+        # Check if process has already exited (crashed immediately)
+        time.sleep(0.05)  # Brief wait to see if it crashes
+        if proc.poll() is not None:
+            exit_code = proc.returncode
+            logger.error(f"Viewer {viewer_name} crashed immediately with exit code {exit_code}")
+            return None
+        
+        # Immediately suspend the process
+        try:
+            os.kill(proc.pid, signal.SIGSTOP)
+            logger.debug(f"Sent SIGSTOP to process {proc.pid}")
+        except OSError as e:
+            logger.error(f"Failed to send SIGSTOP to process {proc.pid}: {e}")
+            proc.terminate()
+            return None
+        
+        # Wait a moment for suspension to take effect
+        time.sleep(0.1)
+        
+        # Verify process is suspended
+        if proc.poll() is None:
+            pid = proc.pid
+            logger.info(f"Viewer {viewer_name} started suspended with PID {pid}")
+            
+            # Register the suspended process
+            key = f"{unique_id}:{file_path}"
+            _suspended_viewer_processes[key] = {
+                'pid': pid,
+                'process': proc,
+                'viewer_name': viewer_name,
+                'file_path': file_path,
+                'unique_id': unique_id,
+                'start_time': time.time()
+            }
+            
+            return pid
+        else:
+            exit_code = proc.returncode
+            logger.error(f"Viewer {viewer_name} failed to suspend - exited with code {exit_code}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Failed to start viewer {viewer_name} suspended: {e}")
+        return None
+
+def get_suspended_viewer_pid(unique_id: str, file_path: str) -> Optional[int]:
+    """Get the PID of a suspended viewer process for the given unique_id and file_path."""
+    key = f"{unique_id}:{file_path}"
+    if key in _suspended_viewer_processes:
+        proc_info = _suspended_viewer_processes[key]
+        # Check if process is still alive
+        try:
+            os.kill(proc_info['pid'], 0)  # Signal 0 just checks if process exists
+            return proc_info['pid']
+        except OSError:
+            # Process died, clean up
+            logger.debug(f"Suspended viewer process {proc_info['pid']} died, cleaning up")
+            del _suspended_viewer_processes[key]
+            return None
+    return None
+
+def resume_viewer_process(unique_id: str, file_path: str) -> bool:
+    """Resume a suspended viewer process."""
+    key = f"{unique_id}:{file_path}"
+    if key in _suspended_viewer_processes:
+        proc_info = _suspended_viewer_processes[key]
+        try:
+            os.kill(proc_info['pid'], signal.SIGCONT)
+            logger.debug(f"Resumed viewer process {proc_info['pid']}")
+            return True
+        except OSError as e:
+            logger.error(f"Failed to resume viewer process {proc_info['pid']}: {e}")
+            return False
+    return False
+
+def cleanup_suspended_viewer(unique_id: str, file_path: str):
+    """Clean up a suspended viewer process."""
+    key = f"{unique_id}:{file_path}"
+    if key in _suspended_viewer_processes:
+        proc_info = _suspended_viewer_processes[key]
+        try:
+            if proc_info['process'].poll() is None:
+                proc_info['process'].terminate()
+                proc_info['process'].wait(timeout=5)
+        except Exception:
+            try:
+                os.kill(proc_info['pid'], signal.SIGKILL)
+            except OSError:
+                pass
+        del _suspended_viewer_processes[key]
+        logger.debug(f"Cleaned up suspended viewer process for {key}")
 
 def run_under_gdb(viewer_cmd: list, file_path: str, unique_id: str) -> tuple[str, Optional[int]]:
-    """Attaches GDB to a running viewer process that has the file loaded to capture crash information and search for payload."""
+    """Attaches GDB to a suspended or running viewer process that has the file loaded to capture crash information and search for payload."""
     viewer_name = os.path.basename(viewer_cmd[0]) if viewer_cmd else "unknown_viewer"
-    logger.info(f"Looking for {viewer_name} process with {file_path} loaded for GDB analysis...")
     
-    # Find the PID of a viewer process that has the file loaded
-    target_pid = find_viewer_pid_with_file(viewer_name, file_path)
+    # First try to get the suspended viewer PID
+    target_pid = get_suspended_viewer_pid(unique_id, file_path)
+    
+    if not target_pid:
+        # Fallback to finding a running viewer process
+        logger.info(f"No suspended {viewer_name} process found, looking for running process with {file_path} loaded...")
+        target_pid = find_viewer_pid_with_file(viewer_name, file_path)
+    
     if not target_pid:
         logger.warning(f"No {viewer_name} process found with {file_path} loaded - cannot attach GDB")
         return f"No viewer process found with file loaded", None
@@ -1577,7 +1714,7 @@ class UnifiedFuzzer:
             {"name": "firefox", "cmd": ["/snap/bin/firefox", "--headless", "-chrootClient", "0", "-sandboxreporter", "--disable-sandbox", "--no-remote"]},
             {"name": "PIL", "cmd": [venv_python, "pil_loader.py"]} # Ensure absolute path for venv python
         ]
-        address_feature_dim = 13 + ELF_FEATURE_VECTOR_SIZE + len(self.viewers)
+        address_feature_dim = 25 + ELF_FEATURE_VECTOR_SIZE + len(self.viewers) + 3
         self.oracle = AddressOracle(address_feature_dim, len(self.gadget_names))
         # Try to load saved Oracle
         try:
@@ -1592,8 +1729,9 @@ class UnifiedFuzzer:
         self.weaknesses = ["optimization_bypass", "uaf", "overflow", "metadata_trigger", "generic_viewer", "aggressive_viewer", "double_free"]
         self.fuzz_types_for_ml = sorted(list(set(self.weaknesses))) # Unique sorted list of fuzz types
         self.chain_types_for_ml = ["ROP", "JOP", "DOP", "VOP"] # Initialize chain types for ML
-        self.max_payload_offset = 16384 # Max expected payload offset for normalization
-        self.max_trigger_offset = 16384 # Max expected trigger offset for normalization
+        self.max_payload_offset = 16384 # Max expected payload offset for normalization , reconsider, doesn't make sense.
+        self.max_trigger_offset = 16384 # Max expected trigger offset for normalization , reconsider, doesn't make sense( large images, struct jumps, etc...)
+
 
         # Netcat monitoring and persistence for reverse shell payloads
         self.netcat_process = None
@@ -2137,79 +2275,91 @@ class UnifiedFuzzer:
             viewer["cmd"](file_path)
         else:
             try:
-                cmd = viewer["cmd"] + [file_path]
-                
-                # Disable ASLR for png_consumer to keep gadget addresses stable during ROP execution
-                #if viewer["name"] == "png_consumer":
-                #    cmd = ["setarch", platform.machine(), "-R"] + cmd
-                #    logger.debug(f"Wrapping png_consumer with setarch -R to disable ASLR")
-                
-                #if "thumbnailer" in viewer["name"]: # This case is not in the current viewers, but kept for robustness
-                #    cmd.append("/tmp/thumb.png")
-                
-                # Inject instrumentation shared object for target viewers that use system libpng
-                # Note: PIL uses its own PNG implementation and doesn't use system libpng
+                # Start viewer suspended for controlled execution and GDB analysis
                 env = os.environ.copy()
-                if viewer["name"] in ["eog", "firefox"]:
-                    so_path = os.path.abspath("./png_instrumentation.so")
-                    if os.path.exists(so_path):
-                        lib_dir = os.path.dirname(so_path)
-                        current_ld_library_path = env.get("LD_LIBRARY_PATH", "")
-                        env["LD_LIBRARY_PATH"] = f"{lib_dir}:{current_ld_library_path}" if current_ld_library_path else lib_dir
-
-                        current_ld_preload = env.get("LD_PRELOAD", "")
-                        env["LD_PRELOAD"] = f"{so_path}:{current_ld_preload}" if current_ld_preload else so_path
-                        logger.debug(f"Injected instrumentation SO into {viewer['name']}: {so_path}")
-                        logger.debug(f"Set LD_LIBRARY_PATH for {viewer['name']}: {env['LD_LIBRARY_PATH']}")
-
-                        # Verify the SO is loadable by checking if it can be dlopened
+                suspended_pid = start_viewer_suspended(viewer["cmd"], file_path, unique_id, env)
+                # If the viewer was started successfully in suspended mode, attempt to resume and monitor it
+                # process will get stuck here for some reason.
+                if suspended_pid:
+                    logger.info(f"Viewer {viewer['name']} started suspended with PID {suspended_pid}")
+                    
+                    # Resume the viewer process to let it execute
+                    if resume_viewer_process(unique_id, file_path):
+                        logger.debug(f"Resumed viewer {viewer['name']} process {suspended_pid}")
+                        
+                        # Let the process run for a reasonable time before GDB analysis
+                        # Don't wait for completion as external viewers may not exit cleanly
+                        time.sleep(2)  # Give the process time to execute and potentially crash
+                        
+                        # Check if process is still running
                         try:
-                            import ctypes
-                            ctypes.CDLL(so_path)
-                            logger.debug(f"Instrumentation SO {so_path} is loadable")
-                        except Exception as e:
-                            logger.warning(f"Instrumentation SO {so_path} may not be loadable: {e}")
+                            os.kill(suspended_pid, 0)  # Signal 0 just checks if process exists
+                            logger.debug(f"Viewer {viewer['name']} process {suspended_pid} is still running")
+                        except OSError:
+                            logger.debug(f"Viewer {viewer['name']} process {suspended_pid} has exited")
+                    
+                    # Clean up the suspended viewer process
+                    cleanup_suspended_viewer(unique_id, file_path)
+                else:
+                    # Fallback to regular execution if suspended startup fails
+                    logger.warning(f"Failed to start {viewer['name']} suspended, falling back to regular execution")
+                    cmd = viewer["cmd"] + [file_path]
+                    
+                    # Inject instrumentation shared object for target viewers that use system libpng
+                    if viewer["name"] in ["eog", "firefox"]:
+                        so_path = os.path.abspath("./png_instrumentation.so")
+                        if os.path.exists(so_path):
+                            lib_dir = os.path.dirname(so_path)
+                            current_ld_library_path = env.get("LD_LIBRARY_PATH", "")
+                            env["LD_LIBRARY_PATH"] = f"{lib_dir}:{current_ld_library_path}" if current_ld_library_path else lib_dir
+
+                            current_ld_preload = env.get("LD_PRELOAD", "")
+                            env["LD_PRELOAD"] = f"{so_path}:{current_ld_preload}" if current_ld_preload else so_path
+                            logger.debug(f"Injected instrumentation SO into {viewer['name']}: {so_path}")
+
+                    logger.debug(f"Executing viewer command: {' '.join(cmd)}")
+                    # For png_consumer, don't capture output to avoid pipe blocking
+                    if viewer["name"] == "png_consumer":
+                        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, text=False)
                     else:
-                        logger.warning(f"Instrumentation SO not found: {so_path}")
-
-                logger.debug(f"Executing viewer command: {' '.join(cmd)}")
-                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
-                try:
-                    proc.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    logger.warning(f"Viewer {viewer['name']} timed out for {file_path}")
+                        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
                     try:
-                        proc.terminate()
-                    except Exception:
-                        pass
-                finally:
-                    stdout, stderr = proc.communicate(timeout=5 if proc.poll() is None else None)
-                    logger.debug(f"{viewer['name']} stdout: {stdout.strip()}")
-                    logger.debug(f"{viewer['name']} stderr: {stderr.strip()}")
-
-                # For external viewers, check if instrumentation was loaded by examining process memory
-                if viewer["name"] in ["eog", "firefox"]:
-                    try:
-                        import psutil
-                        candidate_pids = []
-                        if proc.pid:
-                            candidate_pids.append(proc.pid)
-                        for p in psutil.process_iter(['pid', 'name', 'cmdline']):
-                            if p.info['name'] == viewer['name'].split('/')[-1] and file_path in ' '.join(p.info['cmdline'] or []):
-                                candidate_pids.append(p.info['pid'])
-
-                        for pid in set(candidate_pids):
-                            maps_path = f'/proc/{pid}/maps'
-                            if os.path.exists(maps_path):
-                                with open(maps_path, 'r') as f:
-                                    maps = f.read()
-                                if 'png_instrumentation.so' in maps:
-                                    logger.info(f"Instrumentation SO successfully loaded in {viewer['name']} process {pid}")
-                                    break
+                        if viewer["name"] in ["eog", "firefox"]:
+                            logger.debug(f"External viewer {viewer['name']} started; waiting briefly for startup")
+                            time.sleep(5)
+                        else:
+                            proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        logger.warning(f"Viewer {viewer['name']} timed out for {file_path}")
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=3)
+                        except Exception:
+                            try:
+                                proc.kill()
+                            except Exception:
+                                pass
+                    finally:
+                        stdout = stderr = ""
+                        if proc.poll() is not None:
+                            try:
+                                if viewer["name"] == "png_consumer":
+                                    # For png_consumer, no output to collect
+                                    pass
                                 else:
-                                    logger.warning(f"Instrumentation SO not found in {viewer['name']} process {pid} memory maps")
-                    except Exception as e:
-                        logger.debug(f"Could not verify instrumentation loading: {e}")
+                                    stdout, stderr = proc.communicate(timeout=5)
+                            except subprocess.TimeoutExpired:
+                                logger.warning(f"Timed out while collecting output from {viewer['name']}")
+                                try:
+                                    proc.kill()
+                                except Exception:
+                                    pass
+                                if viewer["name"] != "png_consumer":
+                                    stdout, stderr = proc.communicate(timeout=5)
+                        else:
+                            logger.debug(f"{viewer['name']} process still running after execution; skipping communicate")
+                        logger.debug(f"{viewer['name']} stdout: {stdout.strip()}")
+                        logger.debug(f"{viewer['name']} stderr: {stderr.strip()}")
                         
             except Exception as e:
                 logger.error(f"Error running {viewer['name']}: {e}")
@@ -2428,7 +2578,7 @@ class UnifiedFuzzer:
         tried_offsets = set()
         
         # Intelligent suggestion logic
-        if self.use_intelligent or self.use_advisor:
+        if not self.use_legacy and (self.use_intelligent or self.use_advisor):
             if self.ml_model:
                 suggestion = self.get_intelligent_suggestion(viewer, original_file_path, fuzz_type, current_payload_offset)
                 if self.use_advisor:
@@ -2850,7 +3000,7 @@ class UnifiedFuzzer:
             
             # If we reached here, it means current_payload_offset didn't lead to success or fitting.
             # Try next additional offset if available, otherwise break.
-            if retry_attempt < max_retries - 1 and additional_offsets and not self.use_intelligent: # Only use additional offsets if not intelligent mode
+            if retry_attempt < max_retries - 1 and additional_offsets and not (self.use_intelligent or self.use_advisor): # Only use additional offsets if not using ML suggestions
                 current_payload_offset = additional_offsets.pop(0)
                 tried_offsets.add(current_payload_offset)
                 logger.info(f"Trying additional payload offset: {current_payload_offset}.")
@@ -2967,6 +3117,18 @@ class UnifiedFuzzer:
 
         save_trajectory_database(all_results, target_base_dir)
         logger.info(f"Unified fuzzing session complete. Results saved to {target_base_dir}/fuzzing_trajectory.csv")
+
+    def __del__(self):
+        """Cleanup suspended viewer processes when the fuzzer is destroyed."""
+        global _suspended_viewer_processes
+        if _suspended_viewer_processes:
+            logger.info(f"Cleaning up {len(_suspended_viewer_processes)} suspended viewer processes...")
+            for key, proc_info in list(_suspended_viewer_processes.items()):
+                try:
+                    cleanup_suspended_viewer(proc_info['unique_id'], proc_info['file_path'])
+                except Exception as e:
+                    logger.debug(f"Error cleaning up suspended process {key}: {e}")
+            _suspended_viewer_processes.clear()
 
 def main():
     parser = argparse.ArgumentParser()

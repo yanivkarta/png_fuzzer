@@ -7,6 +7,9 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdint.h>
+//for RTLD_LAZY,loadsym ,etc... :
+#include <dlfcn.h>
+#include <pthread.h>
 
 struct vtable_obj {
     char command[64];
@@ -368,7 +371,12 @@ void read_png_file(char *filename) {
 
     png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     png_infop info = png_create_info_struct(png);
-    if (setjmp(png_jmpbuf(png))) exit(1);
+    if (setjmp(png_jmpbuf(png))) {
+        printf("Error during png struct creation\n");
+        png_destroy_read_struct(&png, &info, NULL);
+        return;
+    }
+
     png_set_crc_action(png, PNG_CRC_QUIET_USE, PNG_CRC_QUIET_USE);
     
     // Handle custom ovfW chunk
@@ -391,7 +399,8 @@ void read_png_file(char *filename) {
     int num_unknowns = png_get_unknown_chunks(png, info, &unknowns);
     for (int i = 0; i < num_unknowns; i++) {
         if (memcmp(unknowns[i].name, "ovfW", 4) == 0) {
-            if (unknowns[i].size >= 8) {
+            if (unknowns[i].size >= 8)
+            {
                 uint32_t w = *(uint32_t *)(unknowns[i].data);
                 uint32_t h = *(uint32_t *)(unknowns[i].data + 4);
                 uint32_t bpp = 4;
@@ -403,7 +412,8 @@ void read_png_file(char *filename) {
                     system((const char *)global_payload_buffer);
                 }
                 void *buf = malloc(size);
-                if (buf) {
+                if (buf) 
+                {
                     memset(buf, 'A', size);
                     free(buf);
                 }
@@ -454,7 +464,7 @@ void read_png_file(char *filename) {
             // Note: This will likely crash if vtable[0] is not a valid function pointer
             // but we already printed the trigger message.
             uaf_obj->vtable[0](uaf_obj->command);
-            exit(0);
+            return; // Return after use to allow crash to be caught by fuzzer
         }
 
         // Process other triggers
@@ -475,7 +485,7 @@ void read_png_file(char *filename) {
                     "ret"
                     : : "r" (aligned_stack) : "x0", "x29", "x30"
                 );
-                exit(1);
+                return; // Return after trigger to allow crash to be caught by fuzzer
             } else if (strcmp(text_ptr[i].key, "Underflow") == 0) {
                 unsigned int len = (unsigned int)text_ptr[i].text_length;
                 if (len < 10) {
@@ -500,7 +510,7 @@ void read_png_file(char *filename) {
                 if (global_payload_buffer[0] != 0) {
                     system((const char *)global_payload_buffer);
                 }
-                exit(1); // Exit after triggering to ensure crash is caught
+                return; // Return after trigger to allow crash to be caught by fuzzer
             }
         }
     }
@@ -636,6 +646,91 @@ int compile_shellcode(void)
     return 0;
 }
 
+void print_png_info(png_structp png, png_infop info) {
+    //print the struct information about the png file to simulate the viewer's behavior and trigger vulnerabilities based on the crafted PNG file. 
+    //print metadata, dimensions, color type, etc.
+    png_uint_32 width = png_get_image_width(png, info); 
+    png_uint_32 height = png_get_image_height(png, info);
+    png_byte color_type = png_get_color_type(png, info);
+    png_byte bit_depth = png_get_bit_depth(png, info);
+
+    //thumbnail information (if present)
+    png_uint_32 thumb_width;
+    png_color_16* thumb_height = NULL;
+    //png_uint_32 is incompatible with png_get_tRNS's expected parameters for thumbnail dimensions, so we need to use temporary variables to store the values and print them. 
+    //png_color_16** is also incompatible with png_get_tRNS's expected parameters for thumbnail color information, so we will ignore the color information for this simulation. 
+
+    if (png_get_tRNS(png, info, NULL, &thumb_width, &thumb_height)) {
+        printf("Thumbnail: %ux%u\n", thumb_width, thumb_height ? thumb_height->green : 0); // Using green as a placeholder for height since we can't use png_color_16* directly 
+    }
+    //print the extracted information to simulate the viewer's behavior and trigger vulnerabilities based on the crafted PNG file. 
+    png_uint_32 rowbytes = png_get_rowbytes(png, info); 
+    printf("PNG Info: width=%u, height=%u, color_type=%u, bit_depth=%u, rowbytes=%u\n", width, height, color_type, bit_depth, rowbytes); 
+    
+    printf("PNG Info: (placeholder)\n");
+}
+void process_with_libpng(const char *filename) {
+    // Placeholder for actual libpng processing logic 
+    // In a real implementation, this would involve calling png_read_png or similar functions
+    // to trigger the vulnerabilities based on the crafted PNG file.
+    printf("Processing PNG with libpng (placeholder)\n");
+    //use libpng's read_png or similar functions to trigger the vulnerabilities based on the crafted PNG file. 
+    //simulate viewer a processing of thumbnails extraction, image resize load and close . 
+    //load libpng .so
+    void *libpng_handle = dlopen("libpng.so", RTLD_LAZY); 
+    if (!libpng_handle) {
+        fprintf(stderr, "Failed to load libpng: %s\n", dlerror());
+        return;
+    }
+    //resolve png_read_png symbol
+    void (*png_read_png)(png_structp, png_infop, int, void *)
+        = dlsym(libpng_handle, "png_read_png");
+    if (!png_read_png) {
+        fprintf(stderr, "Failed to resolve png_read_png: %s\n", dlerror());
+        dlclose(libpng_handle);
+        return;
+    }
+    // Call png_read_png with dummy parameters to simulate processing and trigger vulnerabilities. In a real implementation, this would be done with properly initialized png_structp and png_infop. 
+    //allocate dummy png_structp and png_infop for demonstration (not fully functional, just for triggering) 
+    
+    //allocate and initialize png_structp and png_infop properly to avoid crashes while simulating the processing. :
+    //use png_create_read_struct and png_create_info_struct to create valid structures, then call png_read_png to trigger the vulnerabilities based on the crafted PNG file. 
+    
+        
+    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL); 
+    png_infop info = png_create_info_struct(png); 
+    
+    if (setjmp(png_jmpbuf(png))) {
+        fprintf(stderr, "Error during png processing\n");
+        png_destroy_read_struct(&png, &info, NULL);
+        dlclose(libpng_handle);
+        return;
+    }
+
+
+
+
+    png_read_png(png, info, 0, NULL);
+
+    // print information about the png processing to simulate the viewer's behavior and trigger vulnerabilities based on the crafted PNG file. 
+    printf("Read PNG file: %s\n", filename);
+    printf("========================================\n");
+    printf("png_structp: %p\n", (void *)png);
+    printf("png_infop: %p\n", (void *)info);
+    printf("Simulating thumbnail extraction...\n");
+
+    if (png && info) {
+        //print thumbnail information from the structures and get thumbnail buffer from libpng 
+        print_png_info(png, info); // Placeholder for actual info printing logic 
+
+    }
+
+    printf("Simulated libpng processing complete.\n");
+
+    // Clean up
+    dlclose(libpng_handle);
+
+}
 int main(int argc, char *argv[]) {
     // Print gadget addresses for leak detection
     printf("Gadget mprotect : 0x%lx\n", (uintptr_t)mprotect);
@@ -683,7 +778,8 @@ int main(int argc, char *argv[]) {
 
     if (argc > 1){
      read_png_file(argv[1]);
-     //
+     process_with_libpng(argv[1]); // Uncomment to simulate viewer processing with libpng (may cause crashes due to uninitialized structures, so use with caution) 
+
      return 0;
     }
     //when running with no parameters we compile and dump shellcode for the local platform : 

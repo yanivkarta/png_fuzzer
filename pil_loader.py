@@ -14,19 +14,18 @@ def load_and_process_image(image_path: str):
         # Load the image data
         img.load()
         
+        print(f"Image loaded successfully: {image_path}", file=sys.stdout)
+
         # Resize to 256x256
         img = img.resize((256, 256))
-        
+        print("Image resized to 256x256.", file=sys.stdout)
+
         # Convert to RGB
         img = img.convert("RGB")
-        
-        # Attempt to save to a BytesIO object to simulate processing/rendering
-        # without actually writing to disk or opening a GUI.
-        img_byte_arr = io.BytesIO()
-        img.save(img_byte_arr, format="PNG")
-        img_byte_arr.seek(0) # Reset stream position if needed later, though not strictly necessary here.
+        print("Image converted to RGB.", file=sys.stdout)
         
         # If we reach here, processing was successful
+        print("Image processed successfully.", file=sys.stdout)
         return 0 # Success
     except FileNotFoundError:
         print(f"Error: Image file not found at {image_path}", file=sys.stderr)
@@ -41,5 +40,13 @@ if __name__ == "__main__":
         sys.exit(1)
     
     image_path = sys.argv[1]
+    #generate stdout and stderr output to simulate viewer behavior and potential leaks 
+    print(f"Processing image: {image_path}", file=sys.stdout)
+
     exit_code = load_and_process_image(image_path)
+    if exit_code == 0:
+        print("Image processed successfully.", file=sys.stdout)
+    else:        
+        print("Image processing failed.", file=sys.stderr)
+
     sys.exit(exit_code)
