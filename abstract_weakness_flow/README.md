@@ -24,11 +24,11 @@ For RCE payloads,take a look at the root folder of the png_fuzzer.
 
 To demonstrate the full success/failure monitoring chain:
 
-Launch Listener: python3 scripts/listener.py 4444 in one terminal.
+Launch Listener: ```python3 scripts/listener.py 4444 in one terminal.```
 
-Generate Exploits: python3 scripts/gen_payload.py target_aarch64.
+Generate Exploits: ```python3 scripts/gen_payload.py target_aarch64.```
 
-Run with Monitoring: python3 scripts/monitor.py ./target_aarch64.
+Run with Monitoring: ```python3 scripts/monitor.py ./target_aarch64.```
 
 Analyze Failure: If a crash occurs, GDB will launch, the .gdbinit will trigger, and the ESR_ELx will tell you exactly which mitigation (PAC or BTI) blocked the flow.
 
