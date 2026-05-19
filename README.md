@@ -6,15 +6,17 @@
 ```
 
 # VAEGAN Fuzzer - Part of the AI - RMF Framework. 
-### This was a side project that successfully discovered serveral weaknesses and implemented full payload PoC on the weaknesses.
-### integer overflow, optimization bypass(flag flipping), use-after-free and double-free were tested alongside standard overflows with advanced instrumentation techniques  purposefully to bypass existing mitigations such as PAC/BTI.
-### Any viewer may be added, some viewers would require chroot/sandbox path escape for some payload. 
-### Standard viewer payload is either /usr/bin/logger with a unique message or netcat 'echo ' of a message.
-### Netcat logs will relatively be saved under ./logs/files/netcat/{netcat}_{id} 
-### Sample images are under the 'samples' folder, view at your own risk.
+This was a side project that successfully discovered serveral weaknesses and implemented full payload PoC on the weaknesses.
+integer overflow, optimization bypass(flag flipping), use-after-free and double-free were tested alongside standard overflows with advanced instrumentation techniques  purposefully to bypass existing mitigations such as PAC/BTI.
+Any viewer may be added, some viewers would require chroot/sandbox path escape for some payload. 
+Standard viewer payload is either /usr/bin/logger with a unique message or netcat 'echo ' of a message.
+Netcat logs will relatively be saved under ./logs/files/netcat/{netcat}_{id} 
+Sample images are under the 'samples' folder, view at your own risk.
 
 
-pre-built 
+pre-built models address_oracle.pth  vaegan_fuzzer_model.pth and vaegan_model.pth are pre-trained for aarch64 dgx-os ubnutu based linux fuzzer, the setup script includes training logic and tensorboard logging. 
+
+
 
 This directory contains the implementation of the VAEGAN-based intelligent fuzzer for PNG images. The fuzzer leverages a Variational Autoencoder Generative Adversarial Network (VAEGAN) to generate intelligent fuzzing suggestions, aiming to discover vulnerabilities in PNG image viewers more efficiently.
 
