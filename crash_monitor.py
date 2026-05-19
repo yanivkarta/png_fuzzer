@@ -90,6 +90,31 @@ def request_sudo_if_needed() -> bool:
 
     if _CRASH_ANALYSIS_INITIALIZED:
         return _CRASH_ANALYSIS_ENABLED
+    
+    # For fuzzer execution, automatically deny sudo access since it's not essential
+    # and causes hangs in non-interactive environments
+    import inspect
+    frame = inspect.currentframe()
+    try:
+        # Check if we're being called from the fuzzer's main function
+        while frame:
+            if frame.f_code.co_name == 'main' and 'infect_png_fuzzer' in frame.f_code.co_filename:
+                logger.warning("Running in fuzzer context - crash analysis access denied for non-interactive execution.")
+                _CRASH_ANALYSIS_INITIALIZED = True
+                _CRASH_ANALYSIS_ENABLED = False
+                return False
+            frame = frame.f_back
+    finally:
+        del frame
+    
+    # Check if we're in an interactive terminal
+    import sys
+    if not sys.stdin.isatty():
+        logger.warning("Non-interactive environment detected. Crash analysis access denied.")
+        _CRASH_ANALYSIS_INITIALIZED = True
+        _CRASH_ANALYSIS_ENABLED = False
+        return False
+    
     #initialize the flag to prevent multiple prompts 
     allow = input("Grant sudo access for crash analysis? (y/N): ").strip().lower()
     if allow not in ('y', 'yes'):
