@@ -1,9 +1,11 @@
+from pathlib import Path
 import subprocess
 import os
 import shutil
 import time
 import argparse
 import logging
+from zipfile import Path
 import platform
 import zlib
 import json
@@ -35,7 +37,7 @@ ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
 # PNG IEND chunk marker (hex: 49 45 4e 44 ae 42 60 82)
 IEND_CHUNK = b'\x49\x45\x4e\x44\xae\x42\x60\x82'
 _suspended_viewer_processes = {}  # key: unique_id:file_path, value: {'pid': int, 'process': subprocess.Popen} 
-_suspended_viewer_lock = threading.Lock()  # To synchronize access to the suspended viewer processes dictionary 
+_suspended_viewer_lock = threading.Lock()  # To synchronize access to the suspended viewer processes dictionary
 
 def generate_base_png(output_path: str, width: int = 100, height: int = 100):
     """Generates a valid PNG file with multiple chunks for better fuzzing coverage."""
@@ -82,29 +84,99 @@ def copy_media_folder(source: str, target: str):
 
 def calculate_png_crc(chunk_type: bytes, data: bytes) -> bytes:
     """Calculates the CRC-32 for a PNG chunk."""
-    return zlib.crc32(chunk_type + data).to_bytes(4, 'big')
+    #return zlib.crc32(chunk_type + data).to_bytes(4, 'big')
+    crc = zlib.crc32(chunk_type + data) & 0xffffffff
+    return crc.to_bytes(4, 'big')
+
+
+def validate_operational_netcat_session(file,timeout=5) -> bool:
+    """Validates that the netcat session is operational by sending an echo command redirected to the listening port and checking for the response.""" 
+    try:
+        #netcat should be listening on port 24444 
+        # Send a test message to the netcat listener and check for the response to confirm it's operational 
+        clock = time.time()
+        cmd = f'echo "validation_{clock}!" > /dev/tcp/127.0.0.1/24444' 
+        #check netcat logs under logs/files/netcat/ to see if the message was received 
+        #
+        #
+        #iterate the files relative to the local folder at ./logs/files/netcat/ and check for the message 
+        #
+        #
+        if file is None:
+            
+            for file in os.listdir('./logs/files/netcat/'):
+                if file.startswith('netcat_') and file.endswith('.log'):
+                    with open(os.path.join('./logs/files/netcat/', file), 'r') as f:
+                        if cmd in f.read():
+                            logger.info(f"Netcat session is operational")
+                            return True
+                        else:
+                            logger.error(f"Netcat session is not operational")
+                            return False
+        else :
+            with open(file, 'r') as f:
+                if cmd in f.read():
+                    logger.info(f"Netcat session is operational")
+                    return True
+                else:
+                    logger.error(f"Netcat session is not operational")
+                    return False                
+
+    except Exception as e:
+        logger.error(f"Error validating netcat session: {e}")
+            
+        
+    return False
+    
+
+
+        
 
 def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]:
     """Find the PID of a viewer process that has the specified file loaded in memory."""
-    abs_file_path = os.path.abspath(file_path)
-    if not os.path.exists(abs_file_path):
-        logger.warning(f"Cannot locate viewer process because file does not exist: {abs_file_path}")
-        return None
-
     try:
         import psutil
-
+        abs_file_path = os.path.abspath(file_path)  
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
                 proc_name = proc.info.get('name') or ''
+                cmdline = proc.info.get('cmdline') or []
+                
+                # For Python-based viewers (PIL), check cmdline for the script name
+                # For native viewers, check process name
+                name_match = False
                 if viewer_name.lower() not in proc_name.lower():
+                    # Check if this is a Python process running a viewer script
+                    if viewer_name == "PIL" and "python" in proc_name.lower():
+                        # For PIL, check if pil_loader is in the command line
+                        cmdline_str = ' '.join(cmdline)
+                        if "pil_loader" in cmdline_str.lower():
+                            name_match = True
+                    # Could add similar checks for other Python-based viewers here
+                else:
+                    name_match = True
+                
+                if not name_match:
                     continue
 
-                cmdline = proc.info.get('cmdline') or []
+                # Check command line for the file path
                 for arg in cmdline:
-                    if isinstance(arg, str) and os.path.abspath(arg) == abs_file_path:
-                        logger.debug(f"Found {viewer_name} process {proc.info['pid']} with {abs_file_path} in cmdline")
-                        return proc.info['pid']
+                    if isinstance(arg, str):
+                        # Skip empty strings and arguments that start with '-' (options)
+                        if not arg or arg.startswith('-'):
+                            continue
+                        try:
+                            # Check if the string contains the target file path directly
+                            if abs_file_path in arg:
+                                logger.debug(f"Found {viewer_name} process {proc.info['pid']} with {abs_file_path} in cmdline")
+                                return proc.info['pid']
+                            # Also try normalizing the argument to an absolute path and compare
+                            arg_abs = os.path.abspath(arg)
+                            if arg_abs == abs_file_path:
+                                logger.debug(f"Found {viewer_name} process {proc.info['pid']} with {abs_file_path} in cmdline")
+                                return proc.info['pid']
+                        except (OSError, ValueError):
+                            continue
 
                 maps_path = f'/proc/{proc.info["pid"]}/maps'
                 if os.path.exists(maps_path):
@@ -124,13 +196,19 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
                         except OSError:
                             continue
             except (psutil.NoSuchProcess, psutil.AccessDenied, FileNotFoundError, ProcessLookupError, OSError) as e:
-                logger.debug(f"Could not access process {proc.info.get('pid', 'unknown')} while checking file references: {e}")
+                pid = proc.info.get('pid', 'unknown')
+                if isinstance(e, PermissionError) or "Permission denied" in str(e):
+                    logger.debug(f"Skipping process {pid} (permission denied - run with sudo for full process introspection)")
+                else:
+                    logger.debug(f"Could not access process {pid} while checking file references: {e}")
                 continue
 
     except ImportError:
         # Fallback without psutil
         try:
-            result = subprocess.run(['pgrep', '-f', viewer_name], capture_output=True, text=True, timeout=5)
+            # For PIL, search for pil_loader in command line
+            search_pattern = "pil_loader" if viewer_name == "PIL" else viewer_name
+            result = subprocess.run(['pgrep', '-f', search_pattern], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 pids = result.stdout.strip().split('\n')
                 for pid in pids:
@@ -150,17 +228,22 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
                                     return int(pid)
 
                         fd_dir = f'/proc/{pid}/fd'
-                        if os.path.isdir(fd_dir):
-                            for fd_name in os.listdir(fd_dir):
-                                try:
-                                    fd_path = os.path.realpath(os.path.join(fd_dir, fd_name))
-                                    if fd_path == abs_file_path:
-                                        logger.debug(f"Found {viewer_name} process {pid} with {abs_file_path} open in fd {fd_name}")
-                                        return int(pid)
-                                except OSError:
-                                    continue
-                    except (OSError, ValueError):
-                        continue
+                        try:
+                            if os.path.isdir(fd_dir):
+                                for fd_name in os.listdir(fd_dir):
+                                    try:
+                                        fd_path = os.path.realpath(os.path.join(fd_dir, fd_name))
+                                        if fd_path == abs_file_path:
+                                            logger.debug(f"Found {viewer_name} process {pid} with {abs_file_path} open in fd {fd_name}")
+                                            return int(pid)
+                                    except OSError:
+                                        continue
+                        except PermissionError:
+                            # Skip this process - requires higher privileges to inspect
+                            continue
+                    except (OSError, ValueError) as e:
+                        if not isinstance(e, PermissionError):
+                            continue
         except Exception as e:
             logger.debug(f"Error finding viewer PID: {e}")
 
@@ -171,11 +254,13 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
 def get_suspended_viewer_pid(unique_id: str, file_path: str) -> Optional[int]:
     """Get the PID of a suspended viewer process for the given unique_id and file_path."""
     key = f"{unique_id}:{file_path}"
-    
+    proc_info = None
     with _suspended_viewer_lock:
         if key in _suspended_viewer_processes:
             proc_info = _suspended_viewer_processes[key]
             # Check if process is still alive
+            if proc_info is None:
+                return None
             try:
                 os.kill(proc_info['pid'], 0)  # Signal 0 just checks if process exists
                 return proc_info['pid']
@@ -208,17 +293,17 @@ def cleanup_suspended_viewer(unique_id: str, file_path: str):
     with _suspended_viewer_lock:
         if key in _suspended_viewer_processes:
             proc_info = _suspended_viewer_processes[key]
-        try:
-            if proc_info['process'].poll() is None:
-                proc_info['process'].terminate()
-                proc_info['process'].wait(timeout=5)
-        except Exception:
             try:
-                os.kill(proc_info['pid'], signal.SIGKILL)
-            except OSError:
-                pass
-        del _suspended_viewer_processes[key]
-        logger.debug(f"Cleaned up suspended viewer process for {key}")
+                if proc_info['process'].poll() is None:
+                    proc_info['process'].terminate()
+                    proc_info['process'].wait(timeout=5)
+            except Exception:
+                try:
+                    os.kill(proc_info['pid'], signal.SIGKILL)
+                except OSError:
+                    pass
+            del _suspended_viewer_processes[key]
+            logger.debug(f"Cleaned up suspended viewer process for {key}")
 
 def run_under_gdb(viewer_cmd: list, file_path: str, unique_id: str) -> tuple[str, Optional[int]]:
     """Attaches GDB to a suspended or running viewer process that has the file loaded to capture crash information and search for payload."""
@@ -228,6 +313,11 @@ def run_under_gdb(viewer_cmd: list, file_path: str, unique_id: str) -> tuple[str
     if not os.path.exists(abs_file_path):
         logger.warning(f"Cannot attach GDB because file does not exist: {abs_file_path}")
         return f"File not found before GDB attach: {abs_file_path}", None
+
+    # Skip GDB attachment for png_consumer as it exits too quickly for analysis
+    if viewer_name == "png_consumer":
+        logger.debug(f"Skipping GDB attachment for {viewer_name} (exits too quickly for dynamic analysis)")
+        return f"GDB attachment skipped for {viewer_name}", None
 
     # First try to get the suspended viewer PID
     target_pid = get_suspended_viewer_pid(unique_id, abs_file_path)
@@ -801,8 +891,8 @@ def start_netcat_listener(port: int = 24444, log_dir: str = os.path.join("logs",
     Keeps the listener alive across connections and writes logs into log_dir.
     Returns (nc_process, nc_output_file).
     
-    Uses ncat (from nmap) with timeout per connection to prevent hanging.
-    Falls back to nc with timeout wrapper if ncat unavailable.
+    Uses nc (netcat) to listen on a port and log all connections.
+    Falls back to builtin netcat if ncat unavailable.
     """
     try:
         if not os.path.isabs(log_dir):
@@ -811,9 +901,8 @@ def start_netcat_listener(port: int = 24444, log_dir: str = os.path.join("logs",
         os.makedirs(log_dir, exist_ok=True)
         nc_output_file = os.path.join(log_dir, f"netcat_{int(time.time())}.log")
 
-        # Use line buffering (buffering=1) to ensure immediate flushing on newlines
-        # Text mode is required for proper line handling
-        nc_log_handle = open(nc_output_file, "a", buffering=1)
+        # Open log file for appending - DO NOT pass to subprocess yet
+        nc_log_fd = os.open(nc_output_file, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
         
         # Try ncat first (better timeout support), fall back to nc
         ncat_executable = shutil.which("ncat")
@@ -822,41 +911,43 @@ def start_netcat_listener(port: int = 24444, log_dir: str = os.path.join("logs",
         if ncat_executable:
             # ncat has per-connection timeout: -w sets read timeout
             nc_cmd = [ncat_executable, "-l", "-k", "-v", "-p", str(port), "-w", "2"]
-            logger.info(f"Using ncat with 2-second per-connection timeout")
+            logger.info(f"Using ncat with 2-second per-connection timeout on port {port}")
         elif nc_executable:
             # Use nc with timeout wrapper: timeout command kills connection after read
             nc_cmd = [nc_executable, "-l", "-k", "-v", "-p", str(port)]
-            # Try to use stdbuf for truly unbuffered output
-            stdbuf_executable = shutil.which("stdbuf")
-            if stdbuf_executable:
-                # -o0 = unbuffered stdout, -e0 = unbuffered stderr
-                nc_cmd = [stdbuf_executable, "-o0", "-e0"] + nc_cmd
-                logger.info(f"Using stdbuf with unbuffered output (-o0)")
+            logger.info(f"Using nc (netcat) on port {port}")
         else:
-            raise FileNotFoundError("ncat, nc, or netcat not found in PATH")
+            os.close(nc_log_fd)
+            raise FileNotFoundError("ncat or nc not found in PATH")
 
         # Set up environment to prevent buffering issues
         env = os.environ.copy()
         env['PYTHONUNBUFFERED'] = '1'
         
+        # Pass file descriptor (not file object) to subprocess
+        # This ensures subprocess owns the fd and can write directly to it
         nc_process = subprocess.Popen(
             nc_cmd,
-            stdout=nc_log_handle,
+            stdout=nc_log_fd,
             stderr=subprocess.STDOUT,
-            text=True,
+            pass_fds=(nc_log_fd,),
             env=env
         )
+        
+        # Close our copy of the fd in parent; subprocess has its own
+        # This is important - we don't want the parent holding a reference
+        os.close(nc_log_fd)
         
         # Give process a moment to start
         time.sleep(0.2)
         
         # Verify process started successfully
         if nc_process.poll() is not None:
-            nc_log_handle.close()
             raise RuntimeError(f"Netcat process exited immediately with code {nc_process.returncode}")
         
-        logger.info(f"Started persistent netcat listener on port {port}; logging to {nc_output_file}")
-        return nc_process, nc_output_file
+        logger.info(f"Started netcat listener on port {port}; logging to {nc_output_file}")
+        
+        return nc_process, nc_output_file 
     except Exception as e:
         logger.error(f"Failed to start netcat listener: {e}")
         raise
@@ -974,6 +1065,13 @@ def verify_payload_execution(unique_id: str, viewer_name: str, payload: str, tim
             # Check netcat output file for reverse shell connections
             # Reverse shell verification: prefer explicit output file, else `logs/files/netcat` directory
             if "/dev/tcp" in payload:
+                # Sync filesystem to ensure netcat writes are persisted to disk
+                # This is a lightweight operation that ensures all dirty buffers are flushed
+                try:
+                    os.sync()
+                except:
+                    pass
+                
                 checked_files = []
                 if nc_output_file and os.path.exists(nc_output_file):
                     checked_files.append(nc_output_file)
@@ -1554,6 +1652,7 @@ def analyze_trigger_payload_alignment(file_path: str, fuzz_type: str, trigger_of
         payload_marker = b"InfectionPayload"
         
         trigger_pos = -1
+        gap = -1  # Initialize gap to -1 (invalid/not found)
         trigger_type = trigger_markers.get(fuzz_type, b"tEXt")
         
         if trigger_type in content:
@@ -2670,10 +2769,47 @@ class UnifiedFuzzer:
                             logger.critical(f"Apport crash detected for viewer executable: {report_path}")
                             return apport_info
         return None
-
+    
+    def start_viewer_suspended(self, viewer_cmd: str, file_path: str, unique_id: str, env: dict = None) -> Optional[int]:
+        """Starts a viewer process in suspended mode and returns its PID."""
+        viewer_path = viewer_cmd[0] if isinstance(viewer_cmd, list) else viewer_cmd
+        if not os.path.exists(viewer_path):
+            logger.error(f"Viewer executable not found: {viewer_path}")
+            return None
+        try:
+            viewer_process = subprocess.Popen(viewer_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+            viewer_pid = viewer_process.pid
+            logger.debug(f"Started viewer {viewer_path} with PID {viewer_pid}")
+            return viewer_pid
+        except Exception as e:
+            logger.error(f"Failed to start viewer {viewer_path}: {e}")
+            return None
+    
+    def resume_viewer_process(self, unique_id: str, file_path: str) -> bool:
+        """Resumes a suspended viewer process using GDB."""
+        try:
+            gdb_cmd = [
+                "gdb", "--batch", "-ex", f"attach $(pgrep -f '{file_path}')", "-ex", "set pagination off", "-ex", "continue"
+            ]
+            logger.debug(f"Running GDB to resume viewer process: {' '.join(gdb_cmd)}")
+            subprocess.run(gdb_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+            return True
+        except subprocess.TimeoutExpired:
+            logger.warning(f"GDB command timed out while trying to resume viewer for {file_path}")
+            return False
+        except Exception as e:
+            logger.error(f"Error while trying to resume viewer process with GDB: {e}")
+            return False
+        
     def fuzz_viewer(self, viewer: Dict, file_path: str, unique_id: str, payload: str, nc_process: subprocess.Popen = None, nc_output_file: str = None) -> tuple[str, Optional[Dict]]:  # Updated signature
         """Runs a specific viewer against an infected file and attempts payload fitting."""
         logger.info(f"Testing viewer {viewer['name']} with {file_path}...")
+        
+        # Ensure file exists before attempting to run viewer
+        if not os.path.exists(file_path):
+            logger.error(f"Cannot run {viewer['name']}: file does not exist: {file_path}")
+            return "FAILED", None
+        
         instrumentation_injected = False
         
         if callable(viewer["cmd"]):
@@ -2683,7 +2819,7 @@ class UnifiedFuzzer:
             try:
                 # Start viewer suspended for controlled execution and GDB analysis
                 env = os.environ.copy()
-                suspended_pid = start_viewer_suspended(viewer["cmd"], file_path, unique_id, env)
+                suspended_pid = self.start_viewer_suspended(viewer["cmd"], file_path, unique_id, env)
                 # If the viewer was started successfully in suspended mode, attempt to resume and monitor it
                 # process will get stuck here for some reason.
                 if suspended_pid:
@@ -3617,7 +3753,7 @@ class UnifiedFuzzer:
         global _suspended_viewer_lock
 
         with _suspended_viewer_lock:
-            if _suspended_viewer_processes:
+            if _suspended_viewer_processes and len(_suspended_viewer_processes) > 0:
                 logger.info(f"Cleaning up {len(_suspended_viewer_processes)} suspended viewer processes...")
                 for key, proc_info in list(_suspended_viewer_processes.items()):
                     try:
@@ -3677,4 +3813,5 @@ def main():
         fuzzer.cleanup_netcat_listener()
 
 if __name__ == "__main__":
+    request_sudo_if_needed()
     main()
