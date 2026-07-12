@@ -9,6 +9,12 @@ typedef struct {
 } Config;
 
 // The "Sink" - Target for the DOP attack
+
+#ifdef __cplusplus 
+extern "C" 
+{
+#endif __cplusplus 
+
 void __attribute__((used)) win_gadget() {
     int ret = 0;
     printf("[!] DOP Success: Target Sink Reached.\n");
@@ -21,7 +27,10 @@ void __attribute__((used)) win_gadget() {
 void __attribute__((noinline)) dispatch_callback(Config *cfg) {
     cfg->callback(); 
 }
+#ifdef __cplusplus
 
+}
+#endif //__cplusplus
 int main(int argc, char **argv) {
     Config *cfg = malloc(sizeof(Config));
     

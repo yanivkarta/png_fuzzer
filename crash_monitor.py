@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Tuple, Dict, Any, Union
 import os
 import logging
 import re
@@ -7,15 +7,202 @@ import subprocess
 import shutil
 import time
 import json
+import signal
 from pathlib import Path
+import asyncio
+try:
+    import gdb
+except ImportError:
+    gdb = None
+
+import psutil
+from ml_fuzzer_model import parse_gadget_addresses
+
+
+#gdb integration and enhanced VOP detection added in this file on 2024-06-15, along with improved error handling and logging throughout the crash analysis process. 
+
+
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+if gdb is None:
+    class _DummyGdbEvent:
+        @staticmethod
+        def connect(callback):
+            logger.debug("Dummy GDB: event callback registered (no-op)")
+
+    class _DummyGdbEvents:
+        stop = _DummyGdbEvent()
+        breakpoint = _DummyGdbEvent()
+        cont = _DummyGdbEvent()
+        exit = _DummyGdbEvent()
+        signal = _DummyGdbEvent()
+        thread = _DummyGdbEvent()
+        library_loaded = _DummyGdbEvent()
+        library_unloaded = _DummyGdbEvent()
+        new_objfile = _DummyGdbEvent()
+        library_replaced = _DummyGdbEvent()
+        thread_created = _DummyGdbEvent()
+        thread_exited = _DummyGdbEvent()
+
+    class _DummyBreakpointEvent:
+        pass
+
+    class _DummyGdb:
+        COMMAND_USER = 1
+        events = _DummyGdbEvents()
+        BreakpointEvent = _DummyBreakpointEvent
+
+        @staticmethod
+        def execute(command, to_string=False):
+            logger.debug(f"Dummy GDB execute: {command}")
+            return ""
+
+    gdb = _DummyGdb()
+    logger.warning("gdb module unavailable; using dummy gdb facade for crash_monitor.")
 
 _CRASH_ANALYSIS_INITIALIZED = False
 _CRASH_ANALYSIS_ENABLED = False
 _ORIGINAL_UID = os.getuid()
 _ORIGINAL_GID = os.getgid()
+
+class GdbHelper:
+    """Helper class to interact with gdb for crash analysis."""
+
+    def __init__(self, target_pid: int, unique_id: str):
+        self.target_pid = target_pid
+        self.unique_id = unique_id
+
+        if gdb is None:
+            logger.warning("GdbHelper initialized without Python gdb module available.")
+            return
+
+        try:
+            gdb.execute(f"attach {self.target_pid}")
+            if hasattr(gdb, 'events') and hasattr(gdb.events, 'stop'):
+                gdb.events.stop.connect(self.on_stop)
+        except Exception as e:
+            logger.debug(f"GdbHelper initialization failed: {e}")
+
+    def on_stop(self, event):
+        """Callback for gdb stop event."""
+        if isinstance(event, gdb.BreakpointEvent):
+            return
+        filename = 'gdb_backtrace' + self.unique_id+'.log' 
+        bt = gdb.execute("bt", to_string=True)
+        with open(filename, "a") as f:
+            f.write(f"--- Backtrace for PID {self.target_pid} ---\n{bt}\n")
+            f.write(f"--- Registers ---\n{gdb.execute('info registers', to_string=True)}\n")
+            
+        gdb.execute(f"detach {self.target_pid}")
+        gdb.execute(f"quit")
+        logger.info("GDB stopped. Backtrace logged to gdb_backtrace.log")   
+
+    @staticmethod
+    def attach_to_pid(target_pid: int, unique_id: str, timeout: int = 30) -> tuple[str, Optional[int]]:
+        """Attach GDB to a target PID, search memory for a payload marker, and collect registers/backtrace."""
+        if target_pid is None:
+            return "No target PID provided", None
+
+        gdb_cmd = [
+            "gdb", "-batch", "-p", str(target_pid),
+            "-ex", "set pagination off",
+            "-ex", "set confirm off",
+            "-ex", f'find /b 0x0, 0xffffffffffffffff, "{unique_id}"',
+            "-ex", "bt",
+            "-ex", "info registers",
+            "-ex", "detach",
+            "-ex", "quit"
+        ]
+
+        try:
+            proc = subprocess.run(gdb_cmd, capture_output=True, text=True, timeout=timeout)
+            output = proc.stdout + "\n" + proc.stderr
+
+            if "ptrace attach" in output.lower() or "operation not permitted" in output.lower() or "permission denied" in output.lower():
+                logger.warning(f"GDB ptrace attach failed for PID {target_pid}: {output[:200]}")
+                return "GDB ptrace attach failed (security restrictions)", None
+
+            if proc.returncode != 0:
+                logger.debug(f"GDB exited with return code {proc.returncode}; stderr follows:\n{proc.stderr.strip()}")
+
+            crash_signals = ['SIGSEGV', 'SIGABRT', 'SIGFPE', 'SIGILL', 'SIGBUS', 'SIGTRAP']
+            has_crash = any(sig in output for sig in crash_signals)
+            has_payload = unique_id in output and '0x' in output
+
+            if not (has_crash or has_payload):
+                logger.debug("No crash signal or payload found in GDB output")
+                return output, None
+
+            payload_addr = None
+            search_area = output
+            find_pos = output.lower().rfind('find /b')
+            if find_pos != -1:
+                search_area = output[find_pos:]
+
+            for match in re.findall(r'0x[0-9a-fA-F]+', search_area):
+                try:
+                    payload_addr = int(match, 16)
+                    break
+                except ValueError:
+                    continue
+
+            if payload_addr is not None:
+                logger.info(f"Payload string '{unique_id}' found at {hex(payload_addr)} in GDB memory search output")
+            elif unique_id in output:
+                logger.debug(f"GDB memory search output contained the unique_id string but the address could not be parsed.")
+
+            return output, payload_addr
+
+        except subprocess.TimeoutExpired:
+            logger.warning(f"GDB attach timed out after {timeout}s (possible ptrace hang) for PID {target_pid}")
+            return f"GDB attach timed out (ptrace may be blocked)", None
+        except PermissionError as e:
+            logger.warning(f"GDB attach failed due to permission error: {e}")
+            return f"GDB attach failed with permission error", None
+        except Exception as e:
+            logger.warning(f"GDB attach failed with exception: {e}")
+            return f"GDB attach failed: {e}", None
+
+    @staticmethod
+    def analyze_crash_output(gdb_output: str, viewer_name: str, viewer_cmd: List[str]) -> Dict[str, Union[str, bool, List[str]]]:
+        """Performs deep analysis of GDB output and returns structured crash metadata."""
+        analysis = {
+            "viewer": viewer_name,
+            "faulting_instruction": None,
+            "metadata_involved": False,
+            "backtrace_summary": [],
+            "resolved_viewer_path": None
+        }
+
+        if viewer_cmd and viewer_cmd[0]:
+            try:
+                resolved_path = os.path.realpath(viewer_cmd[0])
+                if os.path.exists(resolved_path):
+                    analysis["resolved_viewer_path"] = resolved_path
+                    logger.debug(f"Resolved viewer path for {viewer_name}: {resolved_path}")
+                else:
+                    logger.warning(f"Resolved path {resolved_path} for viewer {viewer_cmd[0]} does not exist.")
+            except Exception as e:
+                logger.warning(f"Could not resolve real path for viewer {viewer_cmd[0]}: {e}")
+
+        if "eog-metadata-reader-png.c" in gdb_output:
+            analysis["metadata_involved"] = True
+            logger.critical(f"CRASH ANALYSIS: Metadata reader involvement detected in {viewer_name}!")
+
+        pc_match = re.search(r"=> (0x[0-9a-f]+)\s*<.*>:\s*(.*)", gdb_output)
+        if pc_match:
+            analysis["faulting_instruction"] = pc_match.group(2)
+
+        bt_lines = re.findall(r"^#[0-9]+\s+(0x[0-9a-f]+ in .*)", gdb_output, re.MULTILINE)
+        logger.debug(f"GDB output for backtrace: {gdb_output}")
+        logger.debug(f"Extracted backtrace lines: {bt_lines}")
+        analysis["backtrace_summary"] = bt_lines[:5]
+
+        analysis["gadget_addresses"] = parse_gadget_addresses(gdb_output)
+        return analysis
+
 
 @dataclass
 class ApportCrashInfo:
@@ -893,3 +1080,46 @@ def export_crashpad_analysis_json(crashpad_dumps, output_path):
         json.dump(export_data, f, indent=2)
     
     logger.info(f"Exported {len(crashpad_dumps)} Crashpad dump analyses to {output_path}")
+
+
+
+
+class SyslogMonitor:
+    """Monitor syslog for new entries."""
+    def __init__(self, log_file_path, pattern_template=[],crash_patterns=[]):
+        self.pattern_templates = pattern_template
+        self.crash_patterns = crash_patterns
+        self.log_file_path = log_file_path
+        self.last_read_pos = 0
+        self.number_of_lines = 0
+        self.number_of_crashes = 0
+        self.number_of_pwns = 0
+        self.last_crash_time = None
+        self.last_pwn_time = None
+        self.last_pwn_id = ""
+        self.last_crash_pid = None
+        self.pwn_identified = 0
+        self.last_pwn_identified = None
+
+    def on_new_entry(self, entry):
+        """Callback for new syslog entry."""
+        for pattern_template in self.pattern_templates:
+            pattern = pattern_template.format(**entry)
+            if re.search(pattern, entry):
+                self.pwn_identified += 1
+                self.last_pwn_identified = entry
+                
+                self.last_crash_time = time.time()
+                self.last_crash_pid = None  # Reset PID for new crash
+                #analyze behavior:
+                logger.info(f"New PWN log detected: {entry}")
+        
+        for crash_pattern in self.crash_patterns:
+            if re.search(crash_pattern, entry):
+                self.number_of_crashes += 1
+                self.last_crash_time = time.time()
+                self.last_crash_pid = None  # Reset PID for new crash
+                logger.info(f"New crash log detected: {entry}")
+        
+
+        

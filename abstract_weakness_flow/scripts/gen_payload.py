@@ -5,6 +5,8 @@ from elftools.elf.sections import SymbolTableSection
 
 def get_symbol_address(elf, symbol_name):
     """Search for a symbol in the ELF symbol table."""
+    print (f'[+] getting gadget address for \'{symbol_name}\'  from {elf}')
+
     for section in elf.iter_sections():
         if isinstance(section, SymbolTableSection):
             for symbol in section.iter_symbols():
@@ -36,6 +38,9 @@ def generate(bin_path):
         # 1. Resolve win_gadget address natively
         addr = get_symbol_address(elf, "win_gadget")
         if not addr:
+            #try to get it from the export table. 
+
+
             print(f"[!] Error: Could not find 'win_gadget' symbol in {bin_path}")
             sys.exit(1)
             

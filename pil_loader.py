@@ -34,11 +34,27 @@ def load_and_process_image(image_path: str):
         print(f"Error processing image {image_path}: {e}", file=sys.stderr)
         return 1 # Failure
 
+
+# Signal handler to detect child process termination  indicating potential code execution of the payload.
+
+from signal import signal, SIGCHLD
+
+# Define a function to handle SIGCHLD signals
+def handle_sigchld(signum, frame):
+    print(f"[+] Child process terminated, potential payload execution detected{signum},{frame}.", file=sys.stderr) 
+
+
+
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python pil_loader.py <image_path>", file=sys.stderr)
         sys.exit(1)
-    
+
+    # Register the signal handler
+    signal(SIGCHLD, handle_sigchld)
+
     image_path = sys.argv[1]
     #generate stdout and stderr output to simulate viewer behavior and potential leaks 
     print(f"Processing image: {image_path}", file=sys.stdout)

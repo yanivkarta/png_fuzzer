@@ -6,11 +6,110 @@ from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from typing import List, Tuple, Optional, Dict
 import random
+from pathlib import Path
+import numpy as np
 
 ADDRESS_OFFSET_SCALE = 0x10000
 
 #for mutual information based feature selection in the future
 from sklearn.feature_selection import mutual_info_regression, SelectKBest 
+
+#logging 
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+
+def get_model_dir() -> str:
+    """Return the repository models directory."""
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "models"))
+
+
+def find_pretrained_model_paths(base_dir: Optional[str] = None,
+                                model_names: Optional[List[str]] = None) -> List[str]:
+    """Find existing pretrained model checkpoint files in common locations."""
+    if model_names is None:
+        model_names = [
+            "vaegan_fuzzer_model.pth",
+            "vaegan_model.pth",
+            "vaegan.pth",
+            "address_oracle.pth",
+            "address_oracle_old.pth",
+        ]
+
+    roots = []
+    if base_dir:
+        roots.append(base_dir)
+    roots.extend([
+        get_model_dir(),
+        os.path.join(get_model_dir(), "..", "models_unloaded"),
+        os.path.join(get_model_dir(), "..", "models_old"),
+    ])
+
+    found: List[str] = []
+    seen = set()
+    for root in roots:
+        resolved_root = os.path.abspath(root)
+        if not os.path.isdir(resolved_root):
+            continue
+        for name in model_names:
+            path = os.path.join(resolved_root, name)
+            if os.path.isfile(path) and path not in seen:
+                found.append(path)
+                seen.add(path)
+    return found
+
+
+def normalize_feature_vector(values: List[float]) -> List[float]:
+    """Normalize a feature vector to the unit interval while preserving length."""
+    if not values:
+        return []
+    if len(values) == 1:
+        return [1.0]
+
+    min_val = min(values)
+    max_val = max(values)
+    if abs(max_val - min_val) < 1e-8:
+        return [0.5 for _ in values]
+
+    return [(value - min_val) / (max_val - min_val) for value in values]
+
+
+def summarize_feature_correlation(feature_matrix: np.ndarray, target_matrix: np.ndarray,
+                                  feature_names: Optional[List[str]] = None,
+                                  top_k: int = 8) -> Dict[str, List[Dict[str, float]]]:
+    """Compute the strongest feature-to-target correlations for logging and model tuning."""
+    if feature_matrix.size == 0 or target_matrix.size == 0:
+        return {"top_features": []}
+
+    feature_matrix = np.asarray(feature_matrix, dtype=np.float32)
+    target_matrix = np.asarray(target_matrix, dtype=np.float32)
+    if feature_matrix.ndim == 1:
+        feature_matrix = feature_matrix.reshape(1, -1)
+    if target_matrix.ndim == 1:
+        target_matrix = target_matrix.reshape(-1, 1)
+
+    correlations = []
+    for feat_idx in range(feature_matrix.shape[1]):
+        feat_vals = feature_matrix[:, feat_idx]
+        if np.std(feat_vals) < 1e-6:
+            continue
+        max_abs_corr = 0.0
+        for out_idx in range(target_matrix.shape[1]):
+            target_vals = target_matrix[:, out_idx]
+            if np.std(target_vals) < 1e-6:
+                continue
+            corr = np.corrcoef(feat_vals, target_vals)[0, 1]
+            if not np.isnan(corr):
+                max_abs_corr = max(max_abs_corr, abs(float(corr)))
+        correlations.append((feat_idx, max_abs_corr))
+
+    correlations.sort(key=lambda item: item[1], reverse=True)
+    top = []
+    for feat_idx, corr in correlations[:max(1, top_k)]:
+        name = feature_names[feat_idx] if feature_names and feat_idx < len(feature_names) else f"feature_{feat_idx}"
+        top.append({"name": name, "correlation": round(corr, 4)})
+    return {"top_features": top}
 
 
 try:
@@ -25,12 +124,7 @@ import numpy as np
 from lime.lime_tabular import LimeTabularExplainer # Import LIME 
 import time
 import psutil  # For process features
-
-#logging 
-import logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-
+import json
 
 # Assuming FuzzingSample and InstrumentationSuggestion are defined in data_processor.py
 # For standalone testing, we'll define them here or import if data_processor is available.
@@ -817,7 +911,7 @@ def collect_address_features(pid: int,
                              payload_offset: Optional[int] = None,
                              trigger_offset: Optional[int] = None,
                              instrumentation_loaded: float = 0.0) -> List[float]:
-    """Collect features for AddressOracle: clock features, base addresses, CPU/GPU registers, ELF features, and run-time instrumentation parameters."""
+    """Collect features for AddressOracle from procfs, process state, and ELF metadata."""
     try:
         process = psutil.Process(pid)
         process_age = time.time() - process.create_time()
@@ -827,17 +921,18 @@ def collect_address_features(pid: int,
         num_threads = process.num_threads()
 
         proc_maps = _parse_proc_maps(pid)
+        proc_stats = _read_procfs_process_stats(pid)
         cpu_gpu_regs = _sample_cpu_gpu_registers()
+        normalized_elf = normalize_feature_vector(elf_features)
 
         viewer_one_hot = [1.0 if v == viewer_name else 0.0 for v in viewers]
 
-        # Add time of day features
         import datetime
         now = datetime.datetime.now()
         hour_of_day = now.hour / 24.0
         minute_of_hour = now.minute / 60.0
         second_of_minute = now.second / 60.0
-        day_of_week = now.weekday() / 7.0  # 0=Monday, 6=Sunday
+        day_of_week = now.weekday() / 7.0
 
         features = [
             min(process_age / 3600.0, 1.0),
@@ -853,11 +948,17 @@ def collect_address_features(pid: int,
             proc_maps['stack_start'],
             proc_maps['mmap_count'],
             proc_maps['text_map_count'],
+            proc_stats.get('aslr_enabled', 0.0),
+            proc_stats.get('randomize_va_space', 0.0),
+            proc_stats.get('entropy_avail', 0.0),
+            proc_stats.get('rss_mb', 0.0),
+            proc_stats.get('shared_clean', 0.0),
+            proc_stats.get('major_faults', 0.0),
             hour_of_day,
             minute_of_hour,
             second_of_minute,
             day_of_week,
-        ] + cpu_gpu_regs + elf_features + viewer_one_hot
+        ] + cpu_gpu_regs + normalized_elf + viewer_one_hot
 
         if payload_offset is not None and trigger_offset is not None:
             features += [
@@ -871,7 +972,59 @@ def collect_address_features(pid: int,
         return features
     except Exception as e:
         logger.warning(f"Failed to collect features for pid {pid}: {e}")
-        return get_system_features() + [0.0] * 8 + elf_features + [1.0 if v == viewer_name else 0.0 for v in viewers] + [0.0, 0.0, min(1.0, max(0.0, instrumentation_loaded))]
+        return get_system_features() + [0.0] * 8 + normalize_feature_vector(elf_features) + [1.0 if v == viewer_name else 0.0 for v in viewers] + [0.0, 0.0, min(1.0, max(0.0, instrumentation_loaded))]
+
+
+def _read_procfs_value(path: str, default: float = 0.0) -> float:
+    """Safely read an integer-valued procfs file and return a float."""
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as fh:
+            text = fh.read().strip().split()[0]
+        return float(text)
+    except Exception:
+        return default
+
+
+def _read_procfs_process_stats(pid: int) -> Dict[str, float]:
+    """Collect additional procfs-based process statistics for the address oracle."""
+    stats = {
+        'aslr_enabled': 0.0,
+        'randomize_va_space': 0.0,
+        'entropy_avail': 0.0,
+        'rss_mb': 0.0,
+        'shared_clean': 0.0,
+        'major_faults': 0.0,
+    }
+    try:
+        stats['aslr_enabled'] = 1.0 if _read_procfs_value('/proc/sys/kernel/randomize_va_space', 0.0) > 0 else 0.0
+        stats['randomize_va_space'] = min(1.0, max(0.0, _read_procfs_value('/proc/sys/kernel/randomize_va_space', 0.0) / 2.0))
+        stats['entropy_avail'] = min(1.0, max(0.0, _read_procfs_value('/proc/sys/kernel/entropy_avail', 0.0) / 4096.0))
+    except Exception:
+        pass
+
+    status_path = f'/proc/{pid}/status'
+    if os.path.exists(status_path):
+        try:
+            with open(status_path, 'r', encoding='utf-8', errors='ignore') as fh:
+                for line in fh:
+                    if line.startswith('VmRSS:'):
+                        stats['rss_mb'] = min(1.0, float(line.split()[1]) / 1024.0 / 1024.0)
+                    elif line.startswith('RssShmem:'):
+                        stats['shared_clean'] = min(1.0, float(line.split()[1]) / 1024.0 / 1024.0)
+        except Exception:
+            pass
+
+    stat_path = f'/proc/{pid}/stat'
+    if os.path.exists(stat_path):
+        try:
+            with open(stat_path, 'r', encoding='utf-8', errors='ignore') as fh:
+                parts = fh.read().split()
+            if len(parts) > 12:
+                stats['major_faults'] = min(1.0, float(parts[11]) / 100000.0)
+        except Exception:
+            pass
+
+    return stats
 
 
 def get_system_features() -> List[float]:
@@ -1169,6 +1322,15 @@ def train_address_oracle(model: AddressOracle, dataset: AddressDataset, epochs: 
     
     # Compute feature weights based on correlation
     feature_weights = compute_feature_weights(dataset)
+    all_inputs = []
+    all_targets = []
+    for inputs, targets in dataset:
+        all_inputs.append(inputs.numpy())
+        all_targets.append(targets.numpy())
+    if all_inputs and all_targets:
+        corr_summary = summarize_feature_correlation(np.array(all_inputs), np.array(all_targets), feature_names=[f"feature_{i}" for i in range(len(all_inputs[0]))])
+        if corr_summary.get("top_features"):
+            logger.info("AddressOracle feature correlation summary: %s", json.dumps(corr_summary, sort_keys=True))
     
     #if the feature_weights are all close to 1.0, skip weighting during training to avoid adding noise 
     if feature_weights is not None and min(feature_weights) > 0.99 and max(feature_weights) < 1.01: 

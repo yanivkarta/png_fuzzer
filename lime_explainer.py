@@ -121,6 +121,37 @@ class LimeExplainer:
             import traceback
             logger.error(traceback.format_exc())
             return None
+    
+    def explain_and_log_lime_predictions(self, writer: SummaryWriter, instance: np.ndarray, global_step: int): 
+        """
+        Generates LIME explanations for both fuzz_type and payload_offset predictions and logs them to TensorBoard.
+        """
+        # Explain fuzz_type prediction
+        fuzz_type_explanation = self.explain_fuzz_type_prediction(instance)
+        if fuzz_type_explanation:
+            plot_and_log_lime_explanation(writer, fuzz_type_explanation, "Fuzz Type Explanation", global_step, "LIME/FuzzType")
+        else:
+            logger.warning("No explanation generated for fuzz_type prediction.")
+
+        # Explain payload_offset prediction
+        payload_offset_explanation = self.explain_payload_offset_prediction(instance)
+        if payload_offset_explanation:
+            plot_and_log_lime_explanation(writer, payload_offset_explanation, "Payload Offset Explanation", global_step, "LIME/PayloadOffset")
+        else:
+            logger.warning("No explanation generated for payload_offset prediction.")
+
+        title = "LIME Explanation at Step {}".format(global_step)
+
+        # Log the explanations to TensorBoard
+        if fuzz_type_explanation:
+            writer.add_figure(f"LIME/FuzzType/{global_step}", self.plot_lime_explanation(fuzz_type_explanation, title), global_step) 
+        if payload_offset_explanation:
+            writer.add_figure(f"LIME/PayloadOffset/{global_step}", self.plot_lime_explanation(payload_offset_explanation, title), global_step)
+            
+        
+
+
+    
 
 def plot_and_log_lime_explanation(writer: SummaryWriter, explanation_list: List[tuple[str, float]],
                                   title: str, global_step: int, tag: str):

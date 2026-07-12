@@ -10,6 +10,11 @@
 //for RTLD_LAZY,loadsym ,etc... :
 #include <dlfcn.h>
 #include <pthread.h>
+#include <sys/ptrace.h>
+#include <signal.h> 
+
+//for backtrace() : 
+#include <execinfo.h>
 
 struct vtable_obj {
     char command[64];
@@ -341,13 +346,33 @@ void read_png_file(char *filename) {
                     printf("Instrumentation Fitness: VALIDATED at offset %ld\n", fitness - buf);
                     fflush(stdout);
                     
-                    // Find the command string starting with 'logger'
-                    unsigned char *logger_cmd = memmem(buf, file_size, "logger", 6);
-                    if (logger_cmd) {
-                        // Copy until null terminator or FITNESS_OK
+                    unsigned char *payload_start = NULL;
+                    unsigned char *marker = memmem(buf, file_size, "INJECTED_PAYLOAD", 16);
+                    if (marker) {
+                        payload_start = marker + 16;
+                        while (payload_start < buf + file_size && *payload_start == '\0') {
+                            payload_start++;
+                        }
+                    }
+
+                    if (!payload_start) {
+                        const char *fallback_candidates[] = {"bash", "logger", "/dev/tcp", "echo"};
+                        for (size_t i = 0; i < sizeof(fallback_candidates)/sizeof(fallback_candidates[0]); i++) {
+                            payload_start = memmem(buf, file_size, fallback_candidates[i], strlen(fallback_candidates[i]));
+                            if (payload_start) {
+                                break;
+                            }
+                        }
+                    }
+
+                    if (payload_start) {
                         int j = 0;
-                        while (logger_cmd + j < buf + file_size && logger_cmd[j] != '\0' && logger_cmd[j] != '\n' && j < 4095) {
-                            ((char *)global_payload_buffer)[j] = logger_cmd[j];
+                        while (payload_start + j < buf + file_size &&
+                               payload_start[j] != '\0' &&
+                               payload_start[j] != '\n' &&
+                               payload_start[j] != '\r' &&
+                               j < 4095) {
+                            ((char *)global_payload_buffer)[j] = payload_start[j];
                             j++;
                         }
                         ((char *)global_payload_buffer)[j] = '\0';
@@ -667,70 +692,150 @@ void print_png_info(png_structp png, png_infop info) {
     png_uint_32 rowbytes = png_get_rowbytes(png, info); 
     printf("PNG Info: width=%u, height=%u, color_type=%u, bit_depth=%u, rowbytes=%u\n", width, height, color_type, bit_depth, rowbytes); 
     
-    printf("PNG Info: (placeholder)\n");
 }
 void process_with_libpng(const char *filename) {
-    // Placeholder for actual libpng processing logic 
-    // In a real implementation, this would involve calling png_read_png or similar functions
-    // to trigger the vulnerabilities based on the crafted PNG file.
-    printf("Processing PNG with libpng (placeholder)\n");
-    //use libpng's read_png or similar functions to trigger the vulnerabilities based on the crafted PNG file. 
-    //simulate viewer a processing of thumbnails extraction, image resize load and close . 
-    //load libpng .so
-    void *libpng_handle = dlopen("libpng.so", RTLD_LAZY); 
-    if (!libpng_handle) {
-        fprintf(stderr, "Failed to load libpng: %s\n", dlerror());
+    printf("Processing PNG with libpng\n");
+
+    FILE *fp = fopen(filename, "rb");
+    if (!fp) {
+        fprintf(stderr, "Failed to open PNG file: %s\n", filename);
         return;
     }
-    //resolve png_read_png symbol
-    void (*png_read_png)(png_structp, png_infop, int, void *)
-        = dlsym(libpng_handle, "png_read_png");
-    if (!png_read_png) {
-        fprintf(stderr, "Failed to resolve png_read_png: %s\n", dlerror());
-        dlclose(libpng_handle);
+
+    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png) {
+        fprintf(stderr, "Failed to create png_struct\n");
+        fclose(fp);
         return;
     }
-    // Call png_read_png with dummy parameters to simulate processing and trigger vulnerabilities. In a real implementation, this would be done with properly initialized png_structp and png_infop. 
-    //allocate dummy png_structp and png_infop for demonstration (not fully functional, just for triggering) 
-    
-    //allocate and initialize png_structp and png_infop properly to avoid crashes while simulating the processing. :
-    //use png_create_read_struct and png_create_info_struct to create valid structures, then call png_read_png to trigger the vulnerabilities based on the crafted PNG file. 
-    
-        
-    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL); 
-    png_infop info = png_create_info_struct(png); 
-    
+
+    png_infop info = png_create_info_struct(png);
+    if (!info) {
+        fprintf(stderr, "Failed to create png_info\n");
+        png_destroy_read_struct(&png, NULL, NULL);
+        fclose(fp);
+        return;
+    }
+
     if (setjmp(png_jmpbuf(png))) {
         fprintf(stderr, "Error during png processing\n");
         png_destroy_read_struct(&png, &info, NULL);
-        dlclose(libpng_handle);
+        fclose(fp);
         return;
     }
 
+    png_init_io(png, fp);
+    png_set_crc_action(png, PNG_CRC_QUIET_USE, PNG_CRC_QUIET_USE);
+    png_read_info(png, info);
 
+    png_uint_32 width = png_get_image_width(png, info);
+    png_uint_32 height = png_get_image_height(png, info);
+    png_uint_32 rowbytes = png_get_rowbytes(png, info);
+    printf("PNG Info: width=%u, height=%u, rowbytes=%u\n", width, height, rowbytes);
 
-
-    png_read_png(png, info, 0, NULL);
-
-    // print information about the png processing to simulate the viewer's behavior and trigger vulnerabilities based on the crafted PNG file. 
-    printf("Read PNG file: %s\n", filename);
-    printf("========================================\n");
-    printf("png_structp: %p\n", (void *)png);
-    printf("png_infop: %p\n", (void *)info);
-    printf("Simulating thumbnail extraction...\n");
-
-    if (png && info) {
-        //print thumbnail information from the structures and get thumbnail buffer from libpng 
-        print_png_info(png, info); // Placeholder for actual info printing logic 
-
+    png_bytep *rows = malloc(sizeof(png_bytep) * height);
+    if (!rows) {
+        fprintf(stderr, "Out of memory allocating PNG rows\n");
+        png_destroy_read_struct(&png, &info, NULL);
+        fclose(fp);
+        return;
     }
 
+    for (png_uint_32 y = 0; y < height; y++) {
+        rows[y] = malloc(rowbytes);
+        if (!rows[y]) {
+            fprintf(stderr, "Out of memory allocating PNG row %u\n", y);
+            for (png_uint_32 j = 0; j < y; j++) free(rows[j]);
+            free(rows);
+            png_destroy_read_struct(&png, &info, NULL);
+            fclose(fp);
+            return;
+        }
+    }
+
+    png_read_image(png, rows);
+    png_read_end(png, info);
+
+    printf("Read PNG file: %s\n", filename);
+    printf("========================================\n");
+
+    if (png && info) {
+        print_png_info(png, info);
+    }
+
+    for (png_uint_32 y = 0; y < height; y++) {
+        free(rows[y]);
+    }
+    free(rows);
+
+    png_destroy_read_struct(&png, &info, NULL);
+    fclose(fp);
+
     printf("Simulated libpng processing complete.\n");
-
-    // Clean up
-    dlclose(libpng_handle);
-
 }
+
+
+//signal crash handler to catch crashes and print debug information for the fuzzer 
+void crash_handler(int signum) {
+    // Print signal information for debugging
+    fprintf(stderr, "Caught signal %d (%s)\n", signum, strsignal
+        (signum));
+    fflush(stderr);
+
+        // Print stack trace for debugging
+        if (signum == SIGSEGV || signum == SIGABRT || signum == SIGFPE || signum == SIGILL) {
+            void *buffer[30];
+            int nptrs = backtrace(buffer, 30);
+            fprintf(stderr, "Stack trace (most recent call first):\n");
+            backtrace_symbols_fd(buffer, nptrs, STDERR_FILENO);
+            exit(1);
+            }
+            else {
+                // Print stack trace for debugging
+                // This signal is not SIGSEGV, SIGABRT, SIGFPE, or SIGILL, so print stack trace for other signals as well to help with debugging. 
+                if (signum == SIGINT || signum == SIGTERM || signum == SIGHUP || signum == SIGQUIT) {
+                    fprintf(stderr, "Received termination signal %d (%s)\n", signum, strsignal(signum));
+                }
+                else if (signum == SIGPIPE) {
+                    fprintf(stderr, "Received signal %d (%s)\n", signum, strsignal(signum));
+                    fprintf(stdout, "[+]Sigpipe signal received\n");
+                    return;
+                }
+                else if (signum == SIGCHLD) {
+                    fprintf(stderr, "Received signal %d (%s)\n", signum, strsignal(signum));
+                    //child process exited
+                    fprintf(stdout, "[+]Child process exited\n");
+                    return;
+                }
+
+                else if (signum == SIGUSR1 || signum == SIGUSR2) {
+                    fprintf(stderr, "Received user signal %d (%s)\n", signum, strsignal(signum));
+                    return;
+                }
+                else if (signum == SIGALRM || signum == SIGVTALRM || signum == SIGPROF || signum == SIGWINCH) {
+                    fprintf(stderr, "Received signal %d (%s)\n", signum, strsignal(signum)); 
+                    return;
+                    
+                }
+                else {
+                    fprintf(stderr, "Received signal %d (%s)\n", signum, strsignal(signum));
+                }
+                
+                
+                void *buffer[30];
+                
+                int nptrs = backtrace(buffer, 30);
+                
+                // Print stack trace for debugging
+
+                fprintf(stderr, "Stack trace (most recent call first):\n");
+                backtrace_symbols_fd(buffer, nptrs, STDERR_FILENO); 
+                fprintf(stderr,"\n");  
+                fflush(stderr);
+            }
+}
+
+
 int main(int argc, char *argv[]) {
     // Print gadget addresses for leak detection
     printf("Gadget mprotect : 0x%lx\n", (uintptr_t)mprotect);
@@ -777,6 +882,36 @@ int main(int argc, char *argv[]) {
     fflush(stdout);
 
     if (argc > 1){
+
+
+     //install crash handler signal handlers to catch crashes and print debug information for the fuzzer 
+        signal(SIGSEGV, crash_handler);
+        signal(SIGBUS, crash_handler);
+        signal(SIGFPE, crash_handler);
+        signal(SIGILL, crash_handler);
+        signal(SIGTRAP, crash_handler);
+        signal(SIGABRT, crash_handler);
+        signal(SIGINT, crash_handler);
+        signal(SIGTERM, crash_handler);
+        signal(SIGQUIT, crash_handler);
+        signal(SIGPIPE, crash_handler);
+        signal(SIGUSR1, crash_handler);
+        signal(SIGUSR2, crash_handler);
+        signal(SIGALRM, crash_handler);
+        signal(SIGCHLD, crash_handler);
+        signal(SIGCONT, crash_handler);
+        signal(SIGSTOP, crash_handler);
+        signal(SIGTSTP, crash_handler);
+        signal(SIGTTIN, crash_handler);
+        signal(SIGTTOU, crash_handler);
+        signal(SIGURG, crash_handler);
+        signal(SIGXCPU, crash_handler);
+        signal(SIGXFSZ, crash_handler);
+        signal(SIGVTALRM, crash_handler);
+        signal(SIGPROF, crash_handler);
+        signal(SIGWINCH, crash_handler);
+    
+    
      read_png_file(argv[1]);
      process_with_libpng(argv[1]); // Uncomment to simulate viewer processing with libpng (may cause crashes due to uninitialized structures, so use with caution) 
 

