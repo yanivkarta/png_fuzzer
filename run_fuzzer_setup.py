@@ -458,7 +458,7 @@ def check_and_train_address_oracle_model(epochs: int = 2000, data_dirs: Optional
 
     if data_dirs is None:
         data_dirs = [
-            "generated_image_samples/fuzz_results_single",
+            "fuzz_results_single",
             "old_test_data_dir"
         ]
 
