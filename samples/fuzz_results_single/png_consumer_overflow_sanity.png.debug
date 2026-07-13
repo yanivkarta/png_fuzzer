@@ -1,0 +1,28 @@
+{
+  "file": "png_consumer_overflow_sanity.png",
+  "fuzz_type": "overflow",
+  "chain_type": "ROP",
+  "unique_id": "png_consumer_sanity_1783884443",
+  "attack_chain": [],
+  "leaked_addresses": {},
+  "chunk_injection_strategy": "animation_iend",
+  "instrumentation_validation": {
+    "valid": true,
+    "issues": [],
+    "warnings": [],
+    "embeddings": {},
+    "missing_triggers": [],
+    "payload_integrity": true,
+    "doubtful_fitness_markers": []
+  },
+  "trigger_alignment": {
+    "aligned": false,
+    "trigger_offset": -1,
+    "payload_offset": -1,
+    "gap_bytes": -1,
+    "alignment_quality": "unknown",
+    "recommendations": [],
+    "trigger_type": "overflow",
+    "payload_slide": 0
+  }
+}

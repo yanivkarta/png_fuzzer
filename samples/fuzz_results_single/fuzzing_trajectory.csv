@@ -1,0 +1,582 @@
+timestamp,original_file,viewer,fuzz_type,payload_offset_attempted,trigger_offset_attempted,status,reason,retry_attempt,payload_validated,platform,fitting_payload_addr,fitting_offsets,success_label,confidence_score
+1783708021.258896,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783708021.2979019,sample_0.png,png_consumer,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708039.4121726,sample_0.png,png_consumer,optimization_bypass,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708057.5423064,sample_0.png,png_consumer,optimization_bypass,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708075.6761005,sample_0.png,png_consumer,optimization_bypass,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708093.8043778,sample_0.png,png_consumer,optimization_bypass,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708111.8875842,sample_0.png,png_consumer,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708130.039051,sample_0.png,png_consumer,uaf,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708148.1206555,sample_0.png,png_consumer,uaf,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708166.24015,sample_0.png,png_consumer,uaf,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708184.3605275,sample_0.png,png_consumer,uaf,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708202.460663,sample_0.png,png_consumer,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708220.5992303,sample_0.png,png_consumer,overflow,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708238.6860054,sample_0.png,png_consumer,overflow,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708256.775337,sample_0.png,png_consumer,overflow,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708274.8823035,sample_0.png,png_consumer,overflow,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708292.9462783,sample_0.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708311.0347142,sample_0.png,png_consumer,metadata_trigger,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708329.1251488,sample_0.png,png_consumer,metadata_trigger,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708347.2194977,sample_0.png,png_consumer,metadata_trigger,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708365.3040257,sample_0.png,png_consumer,metadata_trigger,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708383.4028919,sample_0.png,png_consumer,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708401.496759,sample_0.png,png_consumer,generic_viewer,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708419.5840178,sample_0.png,png_consumer,generic_viewer,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708437.6786346,sample_0.png,png_consumer,generic_viewer,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708455.7855062,sample_0.png,png_consumer,generic_viewer,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708473.8955822,sample_0.png,png_consumer,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708491.988446,sample_0.png,png_consumer,aggressive_viewer,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708510.091359,sample_0.png,png_consumer,aggressive_viewer,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708528.1784098,sample_0.png,png_consumer,aggressive_viewer,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708546.2735548,sample_0.png,png_consumer,aggressive_viewer,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708564.3908029,sample_0.png,png_consumer,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708582.4782827,sample_0.png,png_consumer,double_free,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708600.5936272,sample_0.png,png_consumer,double_free,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708618.6829097,sample_0.png,png_consumer,double_free,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708636.8006094,sample_0.png,png_consumer,double_free,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708654.984687,sample_0.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708673.1457415,sample_0.png,PIL,metadata_trigger,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708691.2373087,sample_0.png,PIL,metadata_trigger,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708709.3493302,sample_0.png,PIL,metadata_trigger,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708727.4424286,sample_0.png,PIL,metadata_trigger,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.1071317,sample_0.png,PIL,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708673.3559744,sample_0.png,PIL,aggressive_viewer,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708691.4734955,sample_0.png,PIL,aggressive_viewer,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708709.5664103,sample_0.png,PIL,aggressive_viewer,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708727.6917312,sample_0.png,PIL,aggressive_viewer,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.113373,sample_0.png,PIL,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708673.3752527,sample_0.png,PIL,generic_viewer,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708691.524286,sample_0.png,PIL,generic_viewer,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708709.6537826,sample_0.png,PIL,generic_viewer,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708727.7188733,sample_0.png,PIL,generic_viewer,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.4450564,sample_0.png,PIL,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708673.7184258,sample_0.png,PIL,optimization_bypass,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708691.7853522,sample_0.png,PIL,optimization_bypass,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708709.9487693,sample_0.png,PIL,optimization_bypass,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708728.0781388,sample_0.png,PIL,optimization_bypass,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.4830241,sample_0.png,PIL,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708673.7682555,sample_0.png,PIL,overflow,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708691.9458718,sample_0.png,PIL,overflow,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708710.0433323,sample_0.png,PIL,overflow,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708728.1748471,sample_0.png,PIL,overflow,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.612057,sample_0.png,PIL,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708673.8649414,sample_0.png,PIL,double_free,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708692.128394,sample_0.png,PIL,double_free,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708710.3061411,sample_0.png,PIL,double_free,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708728.4489262,sample_0.png,PIL,double_free,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.609903,sample_0.png,PIL,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708673.8597832,sample_0.png,PIL,uaf,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708692.1423852,sample_0.png,PIL,uaf,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708710.2728262,sample_0.png,PIL,uaf,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708728.4705276,sample_0.png,PIL,uaf,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.0248587,sample_0.png,firefox,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708689.3898077,sample_0.png,firefox,metadata_trigger,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708723.5608287,sample_0.png,firefox,metadata_trigger,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708757.680077,sample_0.png,firefox,metadata_trigger,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708791.871781,sample_0.png,firefox,metadata_trigger,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708654.9151518,sample_0.png,eog,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708689.3603556,sample_0.png,eog,metadata_trigger,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708723.4543076,sample_0.png,eog,metadata_trigger,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708757.6044686,sample_0.png,eog,metadata_trigger,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708791.989092,sample_0.png,eog,metadata_trigger,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.0927079,sample_0.png,eog,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708689.419298,sample_0.png,eog,aggressive_viewer,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708723.5476367,sample_0.png,eog,aggressive_viewer,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708757.711216,sample_0.png,eog,aggressive_viewer,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708792.0111046,sample_0.png,eog,aggressive_viewer,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.037109,sample_0.png,eog,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708689.2783089,sample_0.png,eog,generic_viewer,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708723.4266272,sample_0.png,eog,generic_viewer,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708757.6201258,sample_0.png,eog,generic_viewer,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708791.9648037,sample_0.png,eog,generic_viewer,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.3478763,sample_0.png,firefox,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708689.5927734,sample_0.png,firefox,aggressive_viewer,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708723.7143621,sample_0.png,firefox,aggressive_viewer,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708757.8839462,sample_0.png,firefox,aggressive_viewer,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708792.0568912,sample_0.png,firefox,aggressive_viewer,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.442725,sample_0.png,eog,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708689.69712,sample_0.png,eog,optimization_bypass,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708723.863564,sample_0.png,eog,optimization_bypass,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708758.0100844,sample_0.png,eog,optimization_bypass,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708792.1585107,sample_0.png,eog,optimization_bypass,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.4842758,sample_0.png,firefox,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708690.3170393,sample_0.png,firefox,generic_viewer,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708724.486014,sample_0.png,firefox,generic_viewer,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708758.6500797,sample_0.png,firefox,generic_viewer,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708792.877371,sample_0.png,firefox,generic_viewer,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.5511043,sample_0.png,eog,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708690.2802892,sample_0.png,eog,uaf,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708724.4662452,sample_0.png,eog,uaf,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708758.7049568,sample_0.png,eog,uaf,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708792.92624,sample_0.png,eog,uaf,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.627452,sample_0.png,eog,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708690.3929415,sample_0.png,eog,double_free,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708724.595212,sample_0.png,eog,double_free,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708758.7448227,sample_0.png,eog,double_free,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708792.9632494,sample_0.png,eog,double_free,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.6138074,sample_0.png,eog,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708690.4723911,sample_0.png,eog,overflow,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708724.6506443,sample_0.png,eog,overflow,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708758.8049085,sample_0.png,eog,overflow,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708793.0093787,sample_0.png,eog,overflow,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.5332432,sample_0.png,firefox,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708690.5187025,sample_0.png,firefox,uaf,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708724.747367,sample_0.png,firefox,uaf,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708758.9019191,sample_0.png,firefox,uaf,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708793.1013114,sample_0.png,firefox,uaf,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.6247017,sample_0.png,firefox,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708690.6106822,sample_0.png,firefox,overflow,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708724.9275863,sample_0.png,firefox,overflow,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708759.102588,sample_0.png,firefox,overflow,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708793.271536,sample_0.png,firefox,overflow,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.6652741,sample_0.png,firefox,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708690.6035342,sample_0.png,firefox,optimization_bypass,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708724.9775515,sample_0.png,firefox,optimization_bypass,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708759.144059,sample_0.png,firefox,optimization_bypass,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708793.314014,sample_0.png,firefox,optimization_bypass,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708655.6414242,sample_0.png,firefox,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708690.5744903,sample_0.png,firefox,double_free,8,0,FAILED,not triggered,1,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708724.9440315,sample_0.png,firefox,double_free,16,0,FAILED,not triggered,2,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708759.1960557,sample_0.png,firefox,double_free,24,0,FAILED,not triggered,3,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783708793.3610861,sample_0.png,firefox,double_free,32,0,FAILED,not triggered,4,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722130.4113832,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783722130.4553196,sample_9.png,png_consumer,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722148.593454,sample_9.png,png_consumer,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722166.699325,sample_9.png,png_consumer,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722184.7461338,sample_9.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722202.8186638,sample_9.png,png_consumer,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722220.8927824,sample_9.png,png_consumer,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722238.971116,sample_9.png,png_consumer,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.1917603,sample_9.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.4200413,sample_9.png,PIL,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.3711011,sample_9.png,PIL,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.8546395,sample_9.png,PIL,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.9151695,sample_9.png,PIL,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.8919137,sample_9.png,PIL,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.8673863,sample_9.png,PIL,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.0788162,sample_9.png,eog,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.1036422,sample_9.png,firefox,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.3092158,sample_9.png,eog,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.3513417,sample_9.png,eog,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.7660995,sample_9.png,firefox,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.812291,sample_9.png,firefox,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.9409122,sample_9.png,eog,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.8216505,sample_9.png,eog,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.8948674,sample_9.png,eog,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.9295936,sample_9.png,eog,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.9362755,sample_9.png,firefox,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.9396603,sample_9.png,firefox,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.834563,sample_9.png,firefox,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722257.934742,sample_9.png,firefox,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722557.8966594,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783722557.9388573,sample_9.png,png_consumer,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722576.073585,sample_9.png,png_consumer,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722594.2173266,sample_9.png,png_consumer,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722612.3079472,sample_9.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722630.4277482,sample_9.png,png_consumer,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722648.51768,sample_9.png,png_consumer,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722666.674207,sample_9.png,png_consumer,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722684.8307316,sample_9.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.1772695,sample_9.png,PIL,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.3408732,sample_9.png,PIL,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.432995,sample_9.png,PIL,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.539391,sample_9.png,PIL,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.5438974,sample_9.png,PIL,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.6106188,sample_9.png,PIL,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722684.8081572,sample_9.png,eog,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722684.8290265,sample_9.png,firefox,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.099816,sample_9.png,eog,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.223924,sample_9.png,eog,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.2751143,sample_9.png,eog,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.3818657,sample_9.png,firefox,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.3279326,sample_9.png,eog,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.5408788,sample_9.png,eog,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.5306125,sample_9.png,eog,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.625737,sample_9.png,firefox,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.6286383,sample_9.png,firefox,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.6187267,sample_9.png,firefox,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.5065846,sample_9.png,firefox,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783722685.6085575,sample_9.png,firefox,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724466.811383,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724466.8553078,sample_9.png,png_consumer,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724469.9168904,sample_9.png,png_consumer,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724476.6813283,sample_9.png,png_consumer,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724480.3925874,sample_9.png,png_consumer,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724480.4368508,sample_9.png,png_consumer,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724487.1470585,sample_9.png,png_consumer,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724490.8898168,sample_9.png,png_consumer,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724490.9087582,sample_9.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724508.9766853,sample_9.png,png_consumer,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724512.0297735,sample_9.png,png_consumer,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724515.0911782,sample_9.png,png_consumer,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724521.8640323,sample_9.png,png_consumer,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724525.5901406,sample_9.png,png_consumer,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724525.611496,sample_9.png,eog,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6037803,sample_9.png,eog,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6391058,sample_9.png,firefox,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6277878,sample_9.png,firefox,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.636189,sample_9.png,PIL,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6445868,sample_9.png,PIL,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.645045,sample_9.png,PIL,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6099515,sample_9.png,eog,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6449983,sample_9.png,PIL,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6118486,sample_9.png,eog,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6402798,sample_9.png,firefox,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6272783,sample_9.png,firefox,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6462634,sample_9.png,PIL,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6389332,sample_9.png,firefox,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.60959,sample_9.png,eog,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6288764,sample_9.png,firefox,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.608895,sample_9.png,eog,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6453857,sample_9.png,PIL,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724525.6430037,sample_9.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724525.6109147,sample_9.png,eog,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724525.6293414,sample_9.png,firefox,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724786.9462318,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724786.9908085,sample_9.png,png_consumer,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724790.0456161,sample_9.png,png_consumer,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724796.7780695,sample_9.png,png_consumer,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724800.5101488,sample_9.png,png_consumer,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724800.5455618,sample_9.png,png_consumer,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724807.2777739,sample_9.png,png_consumer,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724810.9744985,sample_9.png,png_consumer,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724810.983948,sample_9.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724829.0767784,sample_9.png,png_consumer,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724832.1210098,sample_9.png,png_consumer,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724835.1720998,sample_9.png,png_consumer,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724841.90529,sample_9.png,png_consumer,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.639384,sample_9.png,png_consumer,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.6621718,sample_9.png,eog,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724845.661801,sample_9.png,eog,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724845.6746435,sample_9.png,firefox,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724845.692293,sample_9.png,PIL,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724845.691982,sample_9.png,PIL,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724845.6866198,sample_9.png,firefox,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724845.687494,sample_9.png,PIL,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724845.6763532,sample_9.png,eog,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724845.6876607,sample_9.png,firefox,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724845.692372,sample_9.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724845.6609464,sample_9.png,eog,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724860.6818962,sample_9.png,eog,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724865.9401655,sample_9.png,eog,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.6922636,sample_9.png,PIL,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724862.2298589,sample_9.png,PIL,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724867.011578,sample_9.png,PIL,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.6471226,sample_9.png,eog,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724862.9555442,sample_9.png,eog,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724867.315393,sample_9.png,eog,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.677386,sample_9.png,eog,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724862.3927557,sample_9.png,eog,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724868.0247095,sample_9.png,eog,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.6762426,sample_9.png,firefox,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724862.9997673,sample_9.png,firefox,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724869.0825064,sample_9.png,firefox,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.6874306,sample_9.png,PIL,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724863.0774028,sample_9.png,PIL,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724869.2495759,sample_9.png,PIL,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.6768808,sample_9.png,firefox,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724862.4402256,sample_9.png,firefox,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724869.2710056,sample_9.png,firefox,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.6777966,sample_9.png,firefox,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724863.0666306,sample_9.png,firefox,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724869.3247879,sample_9.png,firefox,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.6920588,sample_9.png,PIL,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724863.1873806,sample_9.png,PIL,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724869.3253803,sample_9.png,PIL,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724845.6744716,sample_9.png,firefox,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724845.6726258,sample_9.png,eog,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724925.4213917,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724925.4661164,sample_9.png,png_consumer,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724928.520164,sample_9.png,png_consumer,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724935.3644078,sample_9.png,png_consumer,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724939.136061,sample_9.png,png_consumer,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724939.1808496,sample_9.png,png_consumer,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724945.934425,sample_9.png,png_consumer,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724949.6725183,sample_9.png,png_consumer,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724949.6916332,sample_9.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724967.7947598,sample_9.png,png_consumer,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724970.8360677,sample_9.png,png_consumer,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724973.8842554,sample_9.png,png_consumer,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724980.640403,sample_9.png,png_consumer,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.3580322,sample_9.png,png_consumer,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.3905363,sample_9.png,eog,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724984.3898435,sample_9.png,firefox,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724984.390841,sample_9.png,eog,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724984.4008658,sample_9.png,PIL,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724984.3792741,sample_9.png,eog,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724984.4051116,sample_9.png,PIL,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724984.4031467,sample_9.png,firefox,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724984.404718,sample_9.png,PIL,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724984.4009342,sample_9.png,firefox,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724984.3784304,sample_9.png,eog,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724995.5816026,sample_9.png,eog,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725002.2845438,sample_9.png,eog,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.404544,sample_9.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724984.3873858,sample_9.png,eog,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783724998.7376435,sample_9.png,eog,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725004.5310366,sample_9.png,eog,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.4057317,sample_9.png,PIL,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725000.780528,sample_9.png,PIL,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725006.8198457,sample_9.png,PIL,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.4027126,sample_9.png,PIL,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725001.0341778,sample_9.png,PIL,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725006.8479135,sample_9.png,PIL,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.404574,sample_9.png,PIL,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725001.090347,sample_9.png,PIL,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725007.1123302,sample_9.png,PIL,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.3911095,sample_9.png,firefox,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725000.2560172,sample_9.png,firefox,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725007.241376,sample_9.png,firefox,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.3784714,sample_9.png,eog,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725001.2373142,sample_9.png,eog,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725007.449878,sample_9.png,eog,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.390776,sample_9.png,firefox,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725001.123752,sample_9.png,firefox,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725007.4615629,sample_9.png,firefox,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.3912888,sample_9.png,firefox,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725001.2888253,sample_9.png,firefox,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725007.4894602,sample_9.png,firefox,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783724984.3803463,sample_9.png,eog,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783724984.403288,sample_9.png,firefox,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783725428.281056,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725428.324853,sample_9.png,png_consumer,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725431.4041426,sample_9.png,png_consumer,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725438.146607,sample_9.png,png_consumer,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725441.9348454,sample_9.png,png_consumer,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725441.9705844,sample_9.png,png_consumer,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725448.7039473,sample_9.png,png_consumer,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725452.441035,sample_9.png,png_consumer,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725452.4503224,sample_9.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783725470.7559547,sample_9.png,png_consumer,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725473.7978215,sample_9.png,png_consumer,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725476.8440437,sample_9.png,png_consumer,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725483.599916,sample_9.png,png_consumer,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.2938333,sample_9.png,png_consumer,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.343139,sample_9.png,PIL,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725487.314641,sample_9.png,eog,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725487.3110178,sample_9.png,eog,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725487.345109,sample_9.png,PIL,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725487.315,sample_9.png,eog,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725487.3130662,sample_9.png,firefox,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725487.3449767,sample_9.png,PIL,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725487.3438964,sample_9.png,firefox,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725487.3455865,sample_9.png,firefox,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725487.3124127,sample_9.png,eog,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725501.1058276,sample_9.png,eog,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725505.0476243,sample_9.png,eog,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.3441172,sample_9.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783725487.3400362,sample_9.png,PIL,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725502.1014435,sample_9.png,PIL,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725507.432364,sample_9.png,PIL,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.3292477,sample_9.png,firefox,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725504.045999,sample_9.png,firefox,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725509.7426498,sample_9.png,firefox,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.3153968,sample_9.png,firefox,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725503.3199618,sample_9.png,firefox,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725509.9222999,sample_9.png,firefox,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.311375,sample_9.png,eog,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725503.3992634,sample_9.png,eog,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725510.3630486,sample_9.png,eog,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.313403,sample_9.png,eog,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725503.5525315,sample_9.png,eog,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725510.4875305,sample_9.png,eog,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.3459277,sample_9.png,PIL,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725503.730994,sample_9.png,PIL,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725510.518737,sample_9.png,PIL,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.3399904,sample_9.png,PIL,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725504.0461965,sample_9.png,PIL,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725510.5191073,sample_9.png,PIL,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.3445623,sample_9.png,firefox,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783725503.6568491,sample_9.png,firefox,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725510.5918117,sample_9.png,firefox,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783725487.3147817,sample_9.png,eog,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783725487.3437438,sample_9.png,firefox,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783729760.135415,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729760.175792,sample_0.png,png_consumer,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729763.2340755,sample_0.png,png_consumer,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729770.062932,sample_0.png,png_consumer,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729773.8640509,sample_0.png,png_consumer,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729773.9065614,sample_0.png,png_consumer,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729780.713085,sample_0.png,png_consumer,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729784.5003138,sample_0.png,png_consumer,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729784.5090537,sample_0.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783729802.5843623,sample_0.png,png_consumer,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729805.6254973,sample_0.png,png_consumer,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729808.6838667,sample_0.png,png_consumer,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729815.503637,sample_0.png,png_consumer,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.2770097,sample_0.png,png_consumer,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.3002062,sample_0.png,eog,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729819.2998502,sample_0.png,eog,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729819.31202,sample_0.png,eog,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729819.3242455,sample_0.png,firefox,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729819.323282,sample_0.png,PIL,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729819.3245625,sample_0.png,PIL,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729819.324352,sample_0.png,firefox,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729819.3265731,sample_0.png,firefox,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729819.3276255,sample_0.png,PIL,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729819.3218658,sample_0.png,eog,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729832.0855463,sample_0.png,eog,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729836.7959933,sample_0.png,eog,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.3271928,sample_0.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783729819.3239205,sample_0.png,PIL,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729833.6684613,sample_0.png,PIL,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729838.8778896,sample_0.png,PIL,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.3280492,sample_0.png,PIL,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729833.6895335,sample_0.png,PIL,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729839.8933914,sample_0.png,PIL,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.3011115,sample_0.png,eog,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729834.9923337,sample_0.png,eog,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729840.8241336,sample_0.png,eog,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.3007681,sample_0.png,eog,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729835.7740183,sample_0.png,eog,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729841.1530538,sample_0.png,eog,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.3282614,sample_0.png,firefox,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729834.7507415,sample_0.png,firefox,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729841.351377,sample_0.png,firefox,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.3216558,sample_0.png,firefox,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729835.7735958,sample_0.png,firefox,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729841.4479043,sample_0.png,firefox,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.3278284,sample_0.png,firefox,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729835.6863976,sample_0.png,firefox,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729841.5934336,sample_0.png,firefox,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.3271532,sample_0.png,PIL,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729835.8393414,sample_0.png,PIL,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729841.7144048,sample_0.png,PIL,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729819.3232422,sample_0.png,firefox,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783729819.3241029,sample_0.png,eog,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783729894.4613142,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729894.5064037,sample_109.png,png_consumer,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729897.574922,sample_109.png,png_consumer,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729904.3682008,sample_109.png,png_consumer,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729908.1155627,sample_109.png,png_consumer,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729908.1540794,sample_109.png,png_consumer,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729914.9169805,sample_109.png,png_consumer,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729918.6731715,sample_109.png,png_consumer,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729918.691365,sample_109.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783729937.053578,sample_109.png,png_consumer,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729940.0837514,sample_109.png,png_consumer,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729943.1253448,sample_109.png,png_consumer,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729949.8982928,sample_109.png,png_consumer,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.646253,sample_109.png,png_consumer,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.6898754,sample_109.png,PIL,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729953.6869435,sample_109.png,firefox,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729953.6684678,sample_109.png,eog,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729953.6656663,sample_109.png,eog,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729953.6836908,sample_109.png,firefox,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729953.6892138,sample_109.png,PIL,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729953.6672902,sample_109.png,eog,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729953.6992712,sample_109.png,firefox,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729953.6878865,sample_109.png,PIL,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729953.689917,sample_109.png,PIL,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729968.3004029,sample_109.png,PIL,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729973.3568866,sample_109.png,PIL,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.682454,sample_109.png,eog,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729968.05648,sample_109.png,eog,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729975.0467727,sample_109.png,eog,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.702237,sample_109.png,PIL,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729968.407171,sample_109.png,PIL,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729975.410136,sample_109.png,PIL,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.6879926,sample_109.png,PIL,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729969.1704812,sample_109.png,PIL,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729975.4155376,sample_109.png,PIL,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.688091,sample_109.png,firefox,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729968.7655828,sample_109.png,firefox,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729975.4671116,sample_109.png,firefox,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.699085,sample_109.png,firefox,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729969.4668927,sample_109.png,firefox,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729975.4828196,sample_109.png,firefox,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.664903,sample_109.png,eog,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729969.4630136,sample_109.png,eog,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729975.63722,sample_109.png,eog,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.6639917,sample_109.png,eog,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729969.4674811,sample_109.png,eog,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729975.9293292,sample_109.png,eog,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.686482,sample_109.png,firefox,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783729969.4739308,sample_109.png,firefox,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729975.9361534,sample_109.png,firefox,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783729953.702906,sample_109.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783729953.6674836,sample_109.png,eog,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783729953.6863782,sample_109.png,firefox,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871607.5061417,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783871607.5410123,sample_109.png,png_consumer,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871610.7543383,sample_109.png,png_consumer,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871613.9406278,sample_109.png,png_consumer,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871617.1265152,sample_109.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871620.2845948,sample_109.png,png_consumer,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871623.4366145,sample_109.png,png_consumer,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871626.6165884,sample_109.png,png_consumer,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783871633.3969357,sample_109.png,png_consumer,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871637.1812172,sample_109.png,png_consumer,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871637.2475188,sample_109.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.6508653,sample_109.png,PIL,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.4160821,sample_109.png,PIL,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.7400098,sample_109.png,PIL,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.3970137,sample_109.png,PIL,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.6774173,sample_109.png,PIL,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.2224977,sample_109.png,firefox,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.4094381,sample_109.png,eog,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.392917,sample_109.png,eog,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.2886364,sample_109.png,PIL,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783871645.883465,sample_109.png,PIL,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871650.0182335,sample_109.png,PIL,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871637.246005,sample_109.png,eog,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783871646.195624,sample_109.png,eog,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871650.3565826,sample_109.png,eog,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871637.2983963,sample_109.png,firefox,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783871646.2550232,sample_109.png,firefox,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871650.530918,sample_109.png,firefox,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871637.6250854,sample_109.png,eog,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.732017,sample_109.png,eog,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.7557824,sample_109.png,eog,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.7562296,sample_109.png,firefox,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783871637.6845973,sample_109.png,firefox,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783871637.575683,sample_109.png,firefox,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783871637.2382846,sample_109.png,eog,metadata_trigger,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783871651.2934377,sample_109.png,eog,metadata_trigger_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871655.0358994,sample_109.png,eog,metadata_trigger_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871637.7563016,sample_109.png,firefox,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783871656.5972943,sample_109.png,firefox,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871660.4715972,sample_109.png,firefox,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871637.7572696,sample_109.png,firefox,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783871656.5976696,sample_109.png,firefox,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783871660.5677269,sample_109.png,firefox,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783884443.792012,,png_consumer,overflow_sanity,0,0,SANITY_CHECK_PASSED,Base png_consumer overflow reverse-shell sanity check,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783884443.8274956,sample_109.png,png_consumer,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884447.0132558,sample_109.png,png_consumer,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884450.088033,sample_109.png,png_consumer,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884453.137914,sample_109.png,png_consumer,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884456.2017744,sample_109.png,png_consumer,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884459.2697935,sample_109.png,png_consumer,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884462.3315392,sample_109.png,png_consumer,double_free,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783884469.0935037,sample_109.png,png_consumer,double_free_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783884472.8870864,sample_109.png,png_consumer,double_free_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783884473.0120478,sample_109.png,PIL,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.0421004,sample_109.png,PIL,metadata_trigger,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.1313262,sample_109.png,PIL,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.1324315,sample_109.png,PIL,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.2921522,sample_109.png,PIL,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.3954353,sample_109.png,PIL,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.4277036,sample_109.png,PIL,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884472.9086232,sample_109.png,eog,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.0531776,sample_109.png,eog,generic_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884472.9832566,sample_109.png,firefox,double_free,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.121869,sample_109.png,eog,aggressive_viewer,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.3785973,sample_109.png,eog,optimization_bypass,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.3642726,sample_109.png,eog,uaf,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.4537873,sample_109.png,eog,overflow,0,0,FAILED,not triggered,0,False,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,0,0.1
+1783884473.2198567,sample_109.png,firefox,aggressive_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783884473.4003327,sample_109.png,firefox,generic_viewer,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783884473.4122882,sample_109.png,firefox,optimization_bypass,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783884472.9225957,sample_109.png,eog,metadata_trigger,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783884486.8995755,sample_109.png,eog,metadata_trigger_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783884490.6547582,sample_109.png,eog,metadata_trigger_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783884472.9832067,sample_109.png,firefox,metadata_trigger,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783884487.3977273,sample_109.png,firefox,metadata_trigger_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783884491.3637264,sample_109.png,firefox,metadata_trigger_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783884473.4539413,sample_109.png,firefox,uaf,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783884489.1922634,sample_109.png,firefox,uaf_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783884492.9989436,sample_109.png,firefox,uaf_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783884473.4007607,sample_109.png,firefox,overflow,0,0,SUCCESS,payload executed,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,1.0
+1783884489.5615149,sample_109.png,firefox,overflow_VOP,0,0,SUCCESS_VOP,VOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
+1783884493.3698924,sample_109.png,firefox,overflow_DOP,0,0,SUCCESS_DOP,DOP bypass successful,0,True,linux_6.17.0_1026_nvidia_aarch64_with_glibc2.39,,,1,0.95
