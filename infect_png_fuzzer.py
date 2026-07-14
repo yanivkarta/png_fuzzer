@@ -54,22 +54,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
  
-try:
-    import resource
-    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-    # Try to raise to the hard limit (or to a sensible max if hard < 4096).
-    new_soft = min(hard, 4096)
-    resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
-    logger.debug(f"Set RLIMIT_NOFILE to {new_soft}/{hard}")
-except Exception as exc:
-    logger.debug(f"Could not raise RLIMIT_NOFILE: {exc}")
 
-# PNG IEND chunk marker (hex: 49 45 4e 44 ae 42 60 82)
 IEND_CHUNK = b'\x49\x45\x4e\x44\xae\x42\x60\x82'
 _suspended_viewer_processes = {}  # key: unique_id:file_path, value: {'pid': int, 'process': subprocess.Popen} 
 _suspended_viewer_lock = threading.Lock()  # To synchronize access to the suspended viewer processes dictionary
 
 
+ 
 def get_png_consumer_compile_command(source_path: str = "png_consumer.c", output_path: str = "./png_consumer", machine: Optional[str] = None) -> List[str]:
     """Return the compiler command used to build png_consumer with suitable flags for the host architecture."""
     compiler = os.environ.get("CC", "gcc")
@@ -580,7 +571,10 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
                 logger.error(f"Failed to gain sudo permissions for process introspection: {e}")
                 logger.warning("Continuing with limited access, some viewer processes may not be detected.")
                 
-
+        #set uid to 0 to gain sudo permissions for process introspection
+        if os.geteuid() != 0:
+            os.seteuid(0)
+            
         
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
@@ -661,6 +655,7 @@ def find_viewer_pid_with_file(viewer_name: str, file_path: str) -> Optional[int]
             except psutil.AccessDenied as e:
                 pid = proc.info.get('pid', 'unknown')
                 logger.debug(f"Skipping process {pid} (AccessDenied - run with sudo for full process introspection)")
+                
                 continue
             except (psutil.NoSuchProcess, FileNotFoundError, ProcessLookupError, OSError) as e:
                 pid = proc.info.get('pid', 'unknown')
@@ -1533,7 +1528,7 @@ def start_netcat_listener(port: int = 24444, log_dir: str = os.path.join("logs",
                 log_f.close()
         except Exception:
             pass
-        
+
     
 
 def verify_netcat_connection(nc_process: Union[subprocess.Popen, AsyncServerProcess], timeout: int = 5) -> bool:
@@ -5272,4 +5267,28 @@ if __name__ == "__main__":
             shutil.move(file_path, os.path.join(old_dir, filename))
             
     request_sudo_if_needed()
+    try:
+        import resource
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        print(f'current limits : soft --> {soft}, hard-->{hard} ')
+        # Try to raise to the hard limit (or to a sensible max if hard < 4096).
+        # try to set uid and gid to 0 (root) if not already, to ensure we can raise limits 
+        
+        previousuid = os.getuid()
+        previousgid = os.getgid()
+        os.setgid(0, 0)
+        os.setuid(0, 0)
+
+
+        
+        new_soft = hard*2# min(hard, -1  )
+        resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard*4))
+        logger.debug(f"Set RLIMIT_NOFILE to {new_soft}/{hard}")
+    except Exception as exc:
+        logger.debug(f"Could not raise RLIMIT_NOFILE: {exc}")
+
+        #set uid/gid
+        os.setuid(previousuid)
+        os.setgid(previousgid)
+
     main()
